@@ -1,3 +1,4 @@
+from pathlib import Path
 import requests
 from bs4 import BeautifulSoup
 import sqlite3
@@ -10,7 +11,9 @@ import urllib3
 # Suppress SSL warnings since Bracket Matrix doesn't have valid cert
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-DATABASE = 'kenpom.db'
+# Get project root (parent of this file's directory)
+PROJECT_ROOT = Path(__file__).parent.parent
+DATABASE = PROJECT_ROOT / 'database' / 'kenpom.db'
 BRACKET_MATRIX_URL = "https://www.bracketmatrix.com"
 CURRENT_SEASON = 2026
 

@@ -1,9 +1,13 @@
+import os
+from pathlib import Path
 import sqlite3
 from datetime import datetime
 from typing import List, Dict, Tuple
 import json
 
-DATABASE = 'kenpom.db'
+# Get project root (parent of this file's directory)
+PROJECT_ROOT = Path(__file__).parent.parent
+DATABASE = PROJECT_ROOT / 'database' / 'kenpom.db'
 CURRENT_SEASON = 2026
 
 # Conference automatic qualifiers (you'll need to update this with actual tournament winners)

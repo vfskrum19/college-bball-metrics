@@ -1,6 +1,11 @@
 import sqlite3
 
-DATABASE = 'kenpom.db'
+import os
+from pathlib import Path
+
+# Get the directory where this script is located (database/)
+SCRIPT_DIR = Path(__file__).parent
+DATABASE = SCRIPT_DIR / 'kenpom.db'
 
 def init_db():
     """Initialize database with all required tables"""

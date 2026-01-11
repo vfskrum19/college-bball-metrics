@@ -1,3 +1,5 @@
+import os
+from pathlib import Path
 import requests
 import sqlite3
 import json
@@ -7,7 +9,9 @@ import time
 # Configuration
 KENPOM_API_KEY = "62554390abbad4d4b369909fe9cf978a2c06f26a5f3c6cf100ae5ed9dece1760"  # Replace with your actual API key
 BASE_URL = "https://kenpom.com"
-DATABASE = 'kenpom.db'
+# Get project root (parent of this file's directory)
+PROJECT_ROOT = Path(__file__).parent.parent
+DATABASE = PROJECT_ROOT / 'database' / 'kenpom.db'
 CURRENT_SEASON = 2026
 
 def get_db():

@@ -1,9 +1,13 @@
+import os
+from pathlib import Path
 import requests
 import sqlite3
 import json
 from difflib import SequenceMatcher
 
-DATABASE = 'kenpom.db'
+# Get project root (parent of this file's directory)
+PROJECT_ROOT = Path(__file__).parent.parent
+DATABASE = PROJECT_ROOT / 'database' / 'kenpom.db'
 ESPN_API_URL = "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/teams"
 
 # Manual mappings for teams that don't match well

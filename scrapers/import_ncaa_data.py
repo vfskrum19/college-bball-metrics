@@ -1,10 +1,14 @@
+import os
+from pathlib import Path
 import csv
 import sqlite3
 from datetime import datetime
 from difflib import SequenceMatcher
 import sys
 
-DATABASE = 'kenpom.db'
+# Get project root (parent of this file's directory)
+PROJECT_ROOT = Path(__file__).parent.parent
+DATABASE = PROJECT_ROOT / 'database' / 'kenpom.db'
 CURRENT_SEASON = 2026
 
 # Manual mappings for NCAA names that don't match KenPom

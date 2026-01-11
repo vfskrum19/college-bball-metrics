@@ -2,12 +2,16 @@
 """
 Find unmatched teams from Bracket Matrix
 """
+import os
+from pathlib import Path
 import json
 import sqlite3
 from difflib import SequenceMatcher
 
-DATABASE = 'kenpom.db'
-BRACKET_JSON = 'bracket_matrix_teams.json'
+# Get project root (parent of this file's directory)
+PROJECT_ROOT = Path(__file__).parent.parent
+DATABASE = PROJECT_ROOT / 'database' / 'kenpom.db'
+BRACKET_JSON = PROJECT_ROOT / 'data' / 'bracket_matrix_teams.json'
 
 def normalize_name(name):
     """Normalize team names for matching"""

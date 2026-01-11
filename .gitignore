@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Database
+database/kenpom.db
+database/kenpom.db-journal
+*.db-journal
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+data/bracket_matrix_debug.html
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Environment variables
+.env
+.env.local
+
+# Node modules (if you add frontend later)
+node_modules/
+package-lock.json
+yarn.lock
+
+# React build (if you add frontend later)
+frontend/build/
+frontend/dist/

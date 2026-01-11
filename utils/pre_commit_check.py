@@ -2,24 +2,28 @@
 """
 Comprehensive verification before committing to version control
 Tests all critical functionality
+
+NOTE: Run this from the PROJECT ROOT, not from utils/ folder
+Usage: python utils/pre_commit_check.py
 """
 import sqlite3
 import os
 import sys
 import json
 
-DATABASE = 'kenpom.db'
+# All paths relative to PROJECT ROOT
+DATABASE = 'database/kenpom.db'
 REQUIRED_FILES = [
-    'init_db.py',
-    'fetch_data.py', 
-    'fetch_espn_branding.py',
-    'import_ncaa_data.py',
-    'generate_bracket.py',
-    'import_bracket_matrix.py',
-    'bracket_matrix_teams.json',
-    'clear_bracket.py',
-    'verify_database.py',
-    'show_schema.py',
+    'database/init_db.py',
+    'scrapers/fetch_data.py', 
+    'scrapers/fetch_espn_branding.py',
+    'scrapers/import_ncaa_data.py',
+    'generators/generate_bracket.py',
+    'scrapers/import_bracket_matrix.py',
+    'data/bracket_matrix_teams.json',
+    'utils/clear_bracket.py',
+    'utils/verify_database.py',
+    'utils/show_schema.py',
 ]
 
 def check_files():
@@ -229,42 +233,76 @@ def check_json_integrity():
     print("5. CHECKING JSON FILES")
     print("="*70)
     
-    if not os.path.exists('bracket_matrix_teams.json'):
-        print("  ✗ bracket_matrix_teams.json missing")
+    json_path = 'data/bracket_matrix_teams.json'
+    
+    if not os.path.exists(json_path):
+        print(f"  ✗ {json_path} missing")
         return False
     
     try:
-        with open('bracket_matrix_teams.json', 'r') as f:
+        with open(json_path, 'r') as f:
             data = json.load(f)
         
         if len(data) != 68:
-            print(f"  ⚠ bracket_matrix_teams.json has {len(data)} teams (expected 68)")
+            print(f"  ⚠ {json_path} has {len(data)} teams (expected 68)")
             return False
         else:
-            print(f"  ✓ bracket_matrix_teams.json: {len(data)} teams")
+            print(f"  ✓ {json_path}: {len(data)} teams")
             return True
     except json.JSONDecodeError as e:
-        print(f"  ✗ bracket_matrix_teams.json is invalid JSON: {e}")
+        print(f"  ✗ {json_path} is invalid JSON: {e}")
         return False
+
+def check_project_structure():
+    """Verify folder structure exists"""
+    print("\n" + "="*70)
+    print("6. CHECKING PROJECT STRUCTURE")
+    print("="*70)
+    
+    required_folders = [
+        'data',
+        'database',
+        'scrapers',
+        'generators',
+        'utils',
+        'scripts',
+    ]
+    
+    all_good = True
+    for folder in required_folders:
+        if os.path.isdir(folder):
+            print(f"  ✓ {folder}/")
+        else:
+            print(f"  ✗ {folder}/ - MISSING")
+            all_good = False
+    
+    return all_good
 
 def main():
     """Run all checks"""
     print("\n" + "="*70)
     print("PRE-COMMIT VERIFICATION")
-    print("Checking system before version control snapshot")
+    print("Checking reorganized project structure")
     print("="*70 + "\n")
+    
+    # Check if running from correct directory
+    if not os.path.exists('README.md'):
+        print("⚠ WARNING: Run this from project root!")
+        print("Usage: python utils/pre_commit_check.py")
+        print()
     
     all_passed = True
     all_issues = []
     
     # Run checks
+    structure_ok = check_project_structure()
     files_ok = check_files()
     db_ok = check_database()
     data_ok, data_issues = check_data_integrity()
     bracket_ok, bracket_issues = check_bracket_integrity()
     json_ok = check_json_integrity()
     
-    all_passed = files_ok and db_ok and data_ok and bracket_ok and json_ok
+    all_passed = structure_ok and files_ok and db_ok and data_ok and bracket_ok and json_ok
     all_issues.extend(data_issues)
     all_issues.extend(bracket_issues)
     
@@ -273,7 +311,8 @@ def main():
     print("VERIFICATION SUMMARY")
     print("="*70)
     
-    print(f"\n  Files:            {'✓ PASS' if files_ok else '✗ FAIL'}")
+    print(f"\n  Project Structure:{'✓ PASS' if structure_ok else '✗ FAIL'}")
+    print(f"  Files:            {'✓ PASS' if files_ok else '✗ FAIL'}")
     print(f"  Database:         {'✓ PASS' if db_ok else '✗ FAIL'}")
     print(f"  Data Integrity:   {'✓ PASS' if data_ok else '✗ FAIL'}")
     print(f"  Bracket Structure:{'✓ PASS' if bracket_ok else '✗ FAIL'}")
@@ -281,16 +320,15 @@ def main():
     
     if all_passed:
         print("\n" + "="*70)
-        print("✓ ALL CHECKS PASSED - READY FOR VERSION CONTROL")
+        print("✓ ALL CHECKS PASSED - READY TO COMMIT")
         print("="*70)
-        print("\nYou can now safely:")
-        print("  1. Initialize git repository (git init)")
-        print("  2. Create .gitignore")
-        print("  3. Commit baseline (git add . && git commit -m 'Initial commit')")
+        print("\nNext steps:")
+        print("  git add .")
+        print("  git commit -m 'Reorganize project structure'")
         return 0
     else:
         print("\n" + "="*70)
-        print("✗ SOME CHECKS FAILED - FIX ISSUES BEFORE COMMITTING")
+        print("✗ SOME CHECKS FAILED")
         print("="*70)
         
         if all_issues:

@@ -2,9 +2,13 @@
 """
 Verify database contents after rebuild
 """
+import os
+from pathlib import Path
 import sqlite3
 
-DATABASE = 'kenpom.db'
+# Get project root (parent of this file's directory)
+PROJECT_ROOT = Path(__file__).parent.parent
+DATABASE = PROJECT_ROOT / 'database' / 'kenpom.db'
 
 def verify_database():
     """Check what's in the database"""
