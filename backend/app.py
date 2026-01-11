@@ -3,126 +3,29 @@ from flask_cors import CORS
 import sqlite3
 from datetime import datetime
 import os
+from pathlib import Path
 
-app = Flask(__name__, static_folder='static', static_url_path='/static')
-CORS(app)  # Enable CORS for React frontend
+# Get paths relative to this file
+BACKEND_DIR = Path(__file__).parent
+PROJECT_ROOT = BACKEND_DIR.parent
+DATABASE = PROJECT_ROOT / 'database' / 'kenpom.db'
+FRONTEND_DIR = PROJECT_ROOT / 'frontend'
 
-DATABASE = 'kenpom.db'
+app = Flask(__name__, 
+            static_folder=str(FRONTEND_DIR / 'static'),
+            static_url_path='/static')
+CORS(app)
 
 @app.route('/')
 def serve_index():
     """Serve the main index.html file"""
-    return send_from_directory('.', 'index.html')
+    return send_from_directory(str(FRONTEND_DIR), 'index.html')
 
 def get_db():
     """Get database connection"""
-    db = sqlite3.connect(DATABASE)
+    db = sqlite3.connect(str(DATABASE))
     db.row_factory = sqlite3.Row
     return db
-
-def init_db():
-    """Initialize the database with schema"""
-    db = get_db()
-    cursor = db.cursor()
-    
-    # Teams table
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS teams (
-            team_id INTEGER PRIMARY KEY,
-            name TEXT NOT NULL,
-            conference TEXT,
-            coach TEXT,
-            arena TEXT,
-            arena_city TEXT,
-            arena_state TEXT,
-            season INTEGER,
-            primary_color TEXT,
-            secondary_color TEXT,
-            logo_url TEXT
-        )
-    ''')
-    
-    # Current ratings table
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS ratings (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            team_id INTEGER,
-            season INTEGER,
-            data_through TEXT,
-            wins INTEGER,
-            losses INTEGER,
-            adj_em REAL,
-            rank_adj_em INTEGER,
-            adj_oe REAL,
-            rank_adj_oe INTEGER,
-            adj_de REAL,
-            rank_adj_de INTEGER,
-            tempo REAL,
-            rank_tempo INTEGER,
-            adj_tempo REAL,
-            rank_adj_tempo INTEGER,
-            luck REAL,
-            rank_luck INTEGER,
-            sos REAL,
-            rank_sos INTEGER,
-            ncsos REAL,
-            rank_ncsos INTEGER,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (team_id) REFERENCES teams (team_id)
-        )
-    ''')
-    
-    # Four factors table
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS four_factors (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            team_id INTEGER,
-            season INTEGER,
-            data_through TEXT,
-            efg_pct REAL,
-            rank_efg_pct INTEGER,
-            to_pct REAL,
-            rank_to_pct INTEGER,
-            or_pct REAL,
-            rank_or_pct INTEGER,
-            ft_rate REAL,
-            rank_ft_rate INTEGER,
-            defg_pct REAL,
-            rank_defg_pct INTEGER,
-            dto_pct REAL,
-            rank_dto_pct INTEGER,
-            dor_pct REAL,
-            rank_dor_pct INTEGER,
-            dft_rate REAL,
-            rank_dft_rate INTEGER,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (team_id) REFERENCES teams (team_id)
-        )
-    ''')
-    
-    # Archive ratings table for historical tracking
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS ratings_archive (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            team_id INTEGER,
-            season INTEGER,
-            archive_date TEXT,
-            is_preseason BOOLEAN,
-            adj_em REAL,
-            rank_adj_em INTEGER,
-            adj_oe REAL,
-            rank_adj_oe INTEGER,
-            adj_de REAL,
-            rank_adj_de INTEGER,
-            adj_tempo REAL,
-            rank_adj_tempo INTEGER,
-            FOREIGN KEY (team_id) REFERENCES teams (team_id)
-        )
-    ''')
-    
-    db.commit()
-    db.close()
-    print("Database initialized successfully!")
 
 # API Endpoints
 
@@ -219,10 +122,15 @@ def compare_teams():
             'SELECT * FROM four_factors WHERE team_id = ? ORDER BY updated_at DESC LIMIT 1',
             (team_id,)
         ).fetchone()
-        resume = db.execute(
-            'SELECT * FROM resume_metrics WHERE team_id = ? ORDER BY updated_at DESC LIMIT 1',
-            (team_id,)
-        ).fetchone()
+        
+        # Check if resume_metrics table exists
+        try:
+            resume = db.execute(
+                'SELECT * FROM resume_metrics WHERE team_id = ? ORDER BY updated_at DESC LIMIT 1',
+                (team_id,)
+            ).fetchone()
+        except:
+            resume = None
         
         teams_data.append({
             'team': dict(team) if team else None,
@@ -298,10 +206,12 @@ def get_status():
     })
 
 if __name__ == '__main__':
-    # Initialize database if it doesn't exist
-    if not os.path.exists(DATABASE):
-        print("Creating database...")
-        init_db()
+    # Check if database exists
+    if not DATABASE.exists():
+        print(f"ERROR: Database not found at {DATABASE}")
+        print("Run: python setup.py")
+        exit(1)
     
+    print(f"Using database: {DATABASE}")
     print("Starting Flask server on http://localhost:5000")
     app.run(debug=True, port=5000)
