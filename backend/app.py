@@ -91,12 +91,19 @@ def get_team_ratings(team_id):
         (team_id,)
     ).fetchone()
     
+    # Get resume metrics
+    resume = db.execute(
+        'SELECT * FROM resume_metrics WHERE team_id = ? ORDER BY updated_at DESC LIMIT 1',
+        (team_id,)
+    ).fetchone()
+    
     db.close()
     
     return jsonify({
         'team': dict(team) if team else None,
         'ratings': dict(ratings) if ratings else None,
-        'four_factors': dict(four_factors) if four_factors else None
+        'four_factors': dict(four_factors) if four_factors else None,
+        'resume': dict(resume) if resume else None
     })
 
 @app.route('/api/compare', methods=['GET'])
