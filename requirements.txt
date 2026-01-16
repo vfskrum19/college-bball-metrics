@@ -1,4 +1,21 @@
-# NCAA Bracket Generator Dependencies
+# Court Vision - Python Dependencies
+# Install with: pip install -r requirements.txt
+
+# Web Framework
+flask>=3.0.0
+flask-cors>=4.0.0
+
+# HTTP Requests
 requests>=2.31.0
+
+# Web Scraping
 beautifulsoup4>=4.12.0
-lxml>=4.9.0
+lxml>=5.0.0
+
+# KenPom Data (player stats)
+kenpompy>=0.9.0
+
+# Data Processing (used by kenpompy)
+pandas>=2.0.0
+
+# Using Kenpompy related installs for now, will likely move away from that in the near future
