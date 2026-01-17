@@ -1,4 +1,6 @@
-function TeamCard({ data }) {
+import { PlayerList } from '../player/PlayerCard';
+
+function TeamCard({ data, showPlayers = true }) {
     const { team, ratings, four_factors, resume } = data;
 
     if (!team || !ratings) {
@@ -197,6 +199,11 @@ function TeamCard({ data }) {
                             </div>
                         )}
                     </div>
+                )}
+
+                {/* Player Section */}
+                {showPlayers && team.team_id && (
+                    <PlayerList teamId={team.team_id} />
                 )}
             </div>
         </div>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import TeamCard from '../compare/TeamCard';
+import { KeyPlayersPreview } from '../player/PlayerCard';
 import './BracketVisualizer.css';
 
 function BracketVisualizer() {
@@ -28,7 +29,6 @@ function BracketVisualizer() {
             });
     }, []);
 
-    // Fetch full team data when a team is selected
     useEffect(() => {
         if (selectedTeam) {
             setTeamCardLoading(true);
@@ -62,19 +62,14 @@ function BracketVisualizer() {
 
     const regions = ['East', 'West', 'South', 'Midwest'];
 
-    // Find opponent for a team
     const findOpponent = (team, region) => {
         if (!team || !bracketData[region]) return null;
         
         const bracketOrder = [
-            { high: 1, low: 16 },
-            { high: 8, low: 9 },
-            { high: 5, low: 12 },
-            { high: 4, low: 13 },
-            { high: 6, low: 11 },
-            { high: 3, low: 14 },
-            { high: 7, low: 10 },
-            { high: 2, low: 15 }
+            { high: 1, low: 16 }, { high: 8, low: 9 },
+            { high: 5, low: 12 }, { high: 4, low: 13 },
+            { high: 6, low: 11 }, { high: 3, low: 14 },
+            { high: 7, low: 10 }, { high: 2, low: 15 }
         ];
         
         for (const pairing of bracketOrder) {
@@ -88,7 +83,6 @@ function BracketVisualizer() {
         return null;
     };
 
-    // Click team in bracket -> Open matchup preview
     const handleTeamClick = (team, region) => {
         const opponent = findOpponent(team, region);
         if (opponent) {
@@ -99,12 +93,10 @@ function BracketVisualizer() {
         }
     };
 
-    // Click team in matchup preview -> Show full TeamCard
     const handleTeamCardClick = (team, region) => {
         setSelectedTeam({ team, region });
     };
 
-    // Go back to matchup from TeamCard
     const handleBackToMatchup = () => {
         if (selectedTeam) {
             const opponent = findOpponent(selectedTeam.team, selectedTeam.region);
@@ -161,7 +153,6 @@ function BracketVisualizer() {
                 ))}
             </div>
 
-            {/* Matchup Preview Modal */}
             {selectedMatchup && !selectedTeam && (
                 <MatchupModal 
                     matchup={selectedMatchup} 
@@ -170,7 +161,6 @@ function BracketVisualizer() {
                 />
             )}
 
-            {/* Full Team Card Modal */}
             {selectedTeam && (
                 <div className="modal-overlay" onClick={handleCloseTeamCard}>
                     <div className="team-card-modal" onClick={e => e.stopPropagation()}>
@@ -210,25 +200,14 @@ function RegionBracket({ region, data, onTeamClick, selectedMatchup }) {
     }
 
     const bracketOrder = [
-        { high: 1, low: 16 },
-        { high: 8, low: 9 },
-        { high: 5, low: 12 },
-        { high: 4, low: 13 },
-        { high: 6, low: 11 },
-        { high: 3, low: 14 },
-        { high: 7, low: 10 },
-        { high: 2, low: 15 }
+        { high: 1, low: 16 }, { high: 8, low: 9 },
+        { high: 5, low: 12 }, { high: 4, low: 13 },
+        { high: 6, low: 11 }, { high: 3, low: 14 },
+        { high: 7, low: 10 }, { high: 2, low: 15 }
     ];
 
-    const getTeamBySeed = (seed) => {
-        return data.teams.find(t => t.seed === seed);
-    };
-
-    const hasPlayIn = (seed) => {
-        return data.teams.filter(t => t.seed === seed).length > 1;
-    };
-
-    // Check if a team is in the selected matchup
+    const getTeamBySeed = (seed) => data.teams.find(t => t.seed === seed);
+    const hasPlayIn = (seed) => data.teams.filter(t => t.seed === seed).length > 1;
     const isTeamSelected = (team) => {
         if (!selectedMatchup || !team) return false;
         return team.team_id === selectedMatchup.highTeam?.team_id || 
@@ -311,12 +290,8 @@ function TeamRow({ team, seed, position, isPlayIn = false, onClick, isSelected =
             <span className="team-seed">{seed}</span>
             <div className="team-color-bar"></div>
             {team.logo_url && (
-                <img 
-                    src={team.logo_url} 
-                    alt="" 
-                    className="team-logo"
-                    onError={(e) => e.target.style.display = 'none'}
-                />
+                <img src={team.logo_url} alt="" className="team-logo"
+                    onError={(e) => e.target.style.display = 'none'} />
             )}
             <span className="team-name">{team.name}</span>
             <span className="team-rating">({team.rank_adj_em})</span>
@@ -338,10 +313,8 @@ function MatchupModal({ matchup, onClose, onTeamClick }) {
                     fetch(`/api/team/${highTeam.team_id}/ratings`),
                     fetch(`/api/team/${lowTeam.team_id}/ratings`)
                 ]);
-                const data1 = await res1.json();
-                const data2 = await res2.json();
-                setTeam1Data(data1);
-                setTeam2Data(data2);
+                setTeam1Data(await res1.json());
+                setTeam2Data(await res2.json());
                 setLoading(false);
             } catch (err) {
                 console.error('Error fetching matchup data:', err);
@@ -355,11 +328,6 @@ function MatchupModal({ matchup, onClose, onTeamClick }) {
 
     const kenPomDiff = (highTeam.adj_em - lowTeam.adj_em).toFixed(1);
     const favorite = highTeam.adj_em > lowTeam.adj_em ? highTeam : lowTeam;
-
-    const getRecord = (data) => {
-        if (!data?.ratings) return '';
-        return `${data.ratings.wins}-${data.ratings.losses}`;
-    };
 
     const getBadLosses = (data) => {
         if (!data?.resume) return 0;
@@ -396,90 +364,55 @@ function MatchupModal({ matchup, onClose, onTeamClick }) {
                             />
                         </div>
 
+                        {/* Key Players Section */}
+                        <div className="modal-players">
+                            <h4>Key Players</h4>
+                            <div className="players-comparison">
+                                <div className="team-players">
+                                    <KeyPlayersPreview teamId={highTeam.team_id} />
+                                </div>
+                                <div className="players-divider"></div>
+                                <div className="team-players">
+                                    <KeyPlayersPreview teamId={lowTeam.team_id} />
+                                </div>
+                            </div>
+                        </div>
+
                         <div className="modal-stats">
                             <h4>Statistical Comparison</h4>
                             
                             <div className="stats-section">
                                 <div className="stats-section-title">Rankings</div>
-                                <StatBar 
-                                    label="KenPom" 
-                                    val1={highTeam.rank_adj_em} 
-                                    val2={lowTeam.rank_adj_em}
-                                    lowerBetter={true}
-                                />
-                                <StatBar 
-                                    label="NET" 
-                                    val1={team1Data?.resume?.net_rank || 'N/A'} 
-                                    val2={team2Data?.resume?.net_rank || 'N/A'}
-                                    lowerBetter={true}
-                                />
+                                <StatBar label="KenPom" val1={highTeam.rank_adj_em} val2={lowTeam.rank_adj_em} lowerBetter={true} />
+                                <StatBar label="NET" val1={team1Data?.resume?.net_rank || 'N/A'} val2={team2Data?.resume?.net_rank || 'N/A'} lowerBetter={true} />
                             </div>
 
                             <div className="stats-section">
                                 <div className="stats-section-title">Efficiency</div>
-                                <StatBar 
-                                    label="Adj. EM" 
-                                    val1={highTeam.adj_em?.toFixed(1)} 
-                                    val2={lowTeam.adj_em?.toFixed(1)}
-                                />
-                                <StatBar 
-                                    label="Offense" 
-                                    val1={highTeam.adj_oe?.toFixed(1)} 
-                                    val2={lowTeam.adj_oe?.toFixed(1)}
-                                />
-                                <StatBar 
-                                    label="Defense" 
-                                    val1={highTeam.adj_de?.toFixed(1)} 
-                                    val2={lowTeam.adj_de?.toFixed(1)}
-                                    lowerBetter={true}
-                                />
+                                <StatBar label="Adj. EM" val1={highTeam.adj_em?.toFixed(1)} val2={lowTeam.adj_em?.toFixed(1)} />
+                                <StatBar label="Offense" val1={highTeam.adj_oe?.toFixed(1)} val2={lowTeam.adj_oe?.toFixed(1)} />
+                                <StatBar label="Defense" val1={highTeam.adj_de?.toFixed(1)} val2={lowTeam.adj_de?.toFixed(1)} lowerBetter={true} />
                             </div>
 
                             <div className="stats-section">
                                 <div className="stats-section-title">Shooting</div>
-                                <StatBar 
-                                    label="eFG%" 
-                                    val1={team1Data?.four_factors?.efg_pct?.toFixed(1) || 'N/A'} 
-                                    val2={team2Data?.four_factors?.efg_pct?.toFixed(1) || 'N/A'}
-                                />
-                                <StatBar 
-                                    label="FT Rate" 
-                                    val1={team1Data?.four_factors?.ft_rate?.toFixed(1) || 'N/A'} 
-                                    val2={team2Data?.four_factors?.ft_rate?.toFixed(1) || 'N/A'}
-                                />
+                                <StatBar label="eFG%" val1={team1Data?.four_factors?.efg_pct?.toFixed(1) || 'N/A'} val2={team2Data?.four_factors?.efg_pct?.toFixed(1) || 'N/A'} />
+                                <StatBar label="FT Rate" val1={team1Data?.four_factors?.ft_rate?.toFixed(1) || 'N/A'} val2={team2Data?.four_factors?.ft_rate?.toFixed(1) || 'N/A'} />
                             </div>
 
                             <div className="stats-section resume-section">
                                 <div className="stats-section-title">Resume</div>
                                 <div className="resume-comparison">
                                     <div className="resume-team">
-                                        <div className="resume-record">
-                                            <span className="quad-label">Q1</span>
-                                            <span className="quad-value">{team1Data?.resume?.quad1_wins || 0}-{team1Data?.resume?.quad1_losses || 0}</span>
-                                        </div>
-                                        <div className="resume-record">
-                                            <span className="quad-label">Q2</span>
-                                            <span className="quad-value">{team1Data?.resume?.quad2_wins || 0}-{team1Data?.resume?.quad2_losses || 0}</span>
-                                        </div>
-                                        <div className="resume-record bad-losses">
-                                            <span className="quad-label">Bad L</span>
-                                            <span className="quad-value">{getBadLosses(team1Data)}</span>
-                                        </div>
+                                        <div className="resume-record"><span className="quad-label">Q1</span><span className="quad-value">{team1Data?.resume?.quad1_wins || 0}-{team1Data?.resume?.quad1_losses || 0}</span></div>
+                                        <div className="resume-record"><span className="quad-label">Q2</span><span className="quad-value">{team1Data?.resume?.quad2_wins || 0}-{team1Data?.resume?.quad2_losses || 0}</span></div>
+                                        <div className="resume-record bad-losses"><span className="quad-label">Bad L</span><span className="quad-value">{getBadLosses(team1Data)}</span></div>
                                     </div>
                                     <div className="resume-divider"></div>
                                     <div className="resume-team">
-                                        <div className="resume-record">
-                                            <span className="quad-label">Q1</span>
-                                            <span className="quad-value">{team2Data?.resume?.quad1_wins || 0}-{team2Data?.resume?.quad1_losses || 0}</span>
-                                        </div>
-                                        <div className="resume-record">
-                                            <span className="quad-label">Q2</span>
-                                            <span className="quad-value">{team2Data?.resume?.quad2_wins || 0}-{team2Data?.resume?.quad2_losses || 0}</span>
-                                        </div>
-                                        <div className="resume-record bad-losses">
-                                            <span className="quad-label">Bad L</span>
-                                            <span className="quad-value">{getBadLosses(team2Data)}</span>
-                                        </div>
+                                        <div className="resume-record"><span className="quad-label">Q1</span><span className="quad-value">{team2Data?.resume?.quad1_wins || 0}-{team2Data?.resume?.quad1_losses || 0}</span></div>
+                                        <div className="resume-record"><span className="quad-label">Q2</span><span className="quad-value">{team2Data?.resume?.quad2_wins || 0}-{team2Data?.resume?.quad2_losses || 0}</span></div>
+                                        <div className="resume-record bad-losses"><span className="quad-label">Bad L</span><span className="quad-value">{getBadLosses(team2Data)}</span></div>
                                     </div>
                                 </div>
                             </div>
@@ -502,11 +435,7 @@ function MatchupTeamCard({ team, data, onClick }) {
     const record = data?.ratings ? `${data.ratings.wins}-${data.ratings.losses}` : '';
     
     return (
-        <div 
-            className="modal-team clickable" 
-            style={{ '--team-color': team.primary_color }}
-            onClick={onClick}
-        >
+        <div className="modal-team clickable" style={{ '--team-color': team.primary_color }} onClick={onClick}>
             {team.logo_url && <img src={team.logo_url} alt={team.name} />}
             <div className="modal-team-info">
                 <span className="modal-seed">#{team.seed} Seed</span>
@@ -524,18 +453,11 @@ function MatchupTeamCard({ team, data, onClick }) {
 function StatBar({ label, val1, val2, lowerBetter = false }) {
     const num1 = parseFloat(val1);
     const num2 = parseFloat(val2);
-    
-    let winner1 = false;
-    let winner2 = false;
+    let winner1 = false, winner2 = false;
     
     if (!isNaN(num1) && !isNaN(num2)) {
-        if (lowerBetter) {
-            winner1 = num1 < num2;
-            winner2 = num2 < num1;
-        } else {
-            winner1 = num1 > num2;
-            winner2 = num2 > num1;
-        }
+        if (lowerBetter) { winner1 = num1 < num2; winner2 = num2 < num1; }
+        else { winner1 = num1 > num2; winner2 = num2 > num1; }
     }
 
     return (

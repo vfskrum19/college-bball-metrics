@@ -395,6 +395,106 @@ def get_matchup_detail(matchup_id):
         'team2': teams_data[1]
     })
 
+# Player API Endpoints
+# Add these to backend/app.py
+
+@app.route('/api/team/<int:team_id>/players', methods=['GET'])
+def get_team_players(team_id):
+    """Get players for a team with their stats and roles"""
+    db = get_db()
+    
+    players = db.execute('''
+        SELECT 
+            p.player_id,
+            p.name,
+            p.position,
+            p.headshot_url,
+            ps.games_played,
+            ps.minutes_pct,
+            ps.ppg,
+            ps.rpg,
+            ps.apg,
+            ps.fg_pct,
+            ps.three_pct,
+            ps.ft_pct,
+            ps.efg_pct,
+            tr.role,
+            tr.role_reason,
+            tr.display_order
+        FROM players p
+        LEFT JOIN player_stats ps ON p.player_id = ps.player_id AND p.season = ps.season
+        LEFT JOIN team_roles tr ON p.player_id = tr.player_id AND p.season = tr.season
+        WHERE p.team_id = ? AND p.season = 2026
+        ORDER BY tr.display_order ASC, ps.ppg DESC
+    ''', (team_id,)).fetchall()
+    
+    db.close()
+    
+    return jsonify({
+        'players': [dict(p) for p in players]
+    })
+
+
+@app.route('/api/team/<int:team_id>/players/key', methods=['GET'])
+def get_key_players(team_id):
+    """Get only star and x_factor for a team (for bracket matchup preview)"""
+    db = get_db()
+    
+    players = db.execute('''
+        SELECT 
+            p.player_id,
+            p.name,
+            p.position,
+            p.headshot_url,
+            ps.ppg,
+            ps.rpg,
+            ps.apg,
+            ps.three_pct,
+            tr.role,
+            tr.role_reason
+        FROM players p
+        LEFT JOIN player_stats ps ON p.player_id = ps.player_id AND p.season = ps.season
+        LEFT JOIN team_roles tr ON p.player_id = tr.player_id AND p.season = tr.season
+        WHERE p.team_id = ? AND p.season = 2026
+        AND tr.role IN ('star', 'x_factor')
+        ORDER BY tr.display_order ASC
+    ''', (team_id,)).fetchall()
+    
+    db.close()
+    
+    return jsonify({
+        'players': [dict(p) for p in players]
+    })
+
+
+@app.route('/api/player/<int:player_id>', methods=['GET'])
+def get_player(player_id):
+    """Get full details for a single player"""
+    db = get_db()
+    
+    player = db.execute('''
+        SELECT 
+            p.*,
+            ps.*,
+            tr.role,
+            tr.role_reason,
+            t.name as team_name,
+            t.logo_url as team_logo,
+            t.primary_color as team_color
+        FROM players p
+        LEFT JOIN player_stats ps ON p.player_id = ps.player_id AND p.season = ps.season
+        LEFT JOIN team_roles tr ON p.player_id = tr.player_id AND p.season = tr.season
+        LEFT JOIN teams t ON p.team_id = t.team_id AND p.season = t.season
+        WHERE p.player_id = ?
+    ''', (player_id,)).fetchone()
+    
+    db.close()
+    
+    if not player:
+        return jsonify({'error': 'Player not found'}), 404
+    
+    return jsonify(dict(player))
+
 if __name__ == '__main__':
     # Check if database exists
     if not DATABASE.exists():
