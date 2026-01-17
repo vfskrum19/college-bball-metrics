@@ -26,6 +26,8 @@ HEADERS = {
 }
 
 # Team name mapping overrides
+# Complete TEAM_SLUG_OVERRIDES - Replace the existing one in fetch_players_sportsref.py
+
 TEAM_SLUG_OVERRIDES = {
     # State schools (St. -> state)
     "Alabama St.": "alabama-state",
@@ -65,6 +67,7 @@ TEAM_SLUG_OVERRIDES = {
     "New Mexico St.": "new-mexico-state",
     "Norfolk St.": "norfolk-state",
     "North Dakota St.": "north-dakota-state",
+    "Northwestern St.": "northwestern-state",
     "Ohio St.": "ohio-state",
     "Oklahoma St.": "oklahoma-state",
     "Oregon St.": "oregon-state",
@@ -80,14 +83,24 @@ TEAM_SLUG_OVERRIDES = {
     "Texas St.": "texas-state",
     "Utah St.": "utah-state",
     "Washington St.": "washington-state",
+    "Weber St.": "weber-state",
     "Wichita St.": "wichita-state",
     "Wright St.": "wright-state",
     "Youngstown St.": "youngstown-state",
+    "Tarleton St.": "tarleton-state",
     
     # Cal State schools
     "Cal St. Bakersfield": "cal-state-bakersfield",
     "Cal St. Fullerton": "cal-state-fullerton",
     "CSUN": "cal-state-northridge",
+    
+    # UC schools
+    "UC Davis": "california-davis",
+    "UC Irvine": "california-irvine",
+    "UC Riverside": "california-riverside",
+    "UC Santa Barbara": "california-santa-barbara",
+    "UC San Diego": "california-san-diego",
+    "Cal Baptist": "california-baptist",
     
     # Other special cases
     "Albany": "albany-ny",
@@ -96,17 +109,37 @@ TEAM_SLUG_OVERRIDES = {
     "Central Connecticut": "central-connecticut-state",
     "Charleston": "college-of-charleston",
     "East Tennessee St.": "east-tennessee-state",
-    "Houston Christian": "houston-christian",
+    "Houston Christian": "houston-baptist",
     "Little Rock": "arkansas-little-rock",
     "Louisiana": "louisiana-lafayette",
     "McNeese": "mcneese-state",
     "N.C. State": "north-carolina-state",
     "NC State": "north-carolina-state",
     "Nicholls": "nicholls-state",
-    "Purdue Fort Wayne": "purdue-fort-wayne",
+    "Purdue Fort Wayne": "ipfw",
     "IU Indy": "iupui",
+    "Prairie View A&M": "prairie-view",
+    "SIUE": "southern-illinois-edwardsville",
+    "SIU Edwardsville": "southern-illinois-edwardsville",
+    "Southeast Missouri": "southeast-missouri-state",
+    "Southern Miss": "southern-mississippi",
+    "Saint Francis": "saint-francis-pa",
+    "Texas A&M Corpus Chris": "texas-am-corpus-christi",
+    "Texas A&M-CC": "texas-am-corpus-christi",
+    "The Citadel": "citadel",
+    "UMass Lowell": "massachusetts-lowell",
+    "Kansas City": "missouri-kansas-city",
+    "UMKC": "missouri-kansas-city",
+    "USC Upstate": "south-carolina-upstate",
+    "UT Rio Grande Valley": "texas-pan-american",
+    "UTRGV": "texas-pan-american",
+    "VMI": "virginia-military-institute",
+    "Utah Tech": "dixie-state",
+    "St. Thomas": "st-thomas-mn",
+    "Queens": "queens-nc",
+    "East Texas A&M": "texas-am-commerce",
     
-    # Existing overrides (keep these)
+    # Existing overrides
     "Connecticut": "connecticut",
     "UConn": "connecticut",
     "Miami FL": "miami-fl",
@@ -135,14 +168,11 @@ TEAM_SLUG_OVERRIDES = {
     "MTSU": "middle-tennessee",
     "FIU": "florida-international",
     "FAU": "florida-atlantic",
-    "SIU Edwardsville": "southern-illinois-edwardsville",
     "UT Arlington": "texas-arlington",
     "UT Martin": "tennessee-martin",
     "UTSA": "texas-san-antonio",
-    "UTRGV": "texas-rio-grande-valley",
     "UIC": "illinois-chicago",
     "UMBC": "maryland-baltimore-county",
-    "UMKC": "missouri-kansas-city",
     "UNC Wilmington": "north-carolina-wilmington",
     "UNC Greensboro": "north-carolina-greensboro",
     "UNC Asheville": "north-carolina-asheville",
@@ -150,7 +180,6 @@ TEAM_SLUG_OVERRIDES = {
     "Loyola MD": "loyola-md",
     "Loyola Marymount": "loyola-marymount",
     "Texas A&M": "texas-am",
-    "Texas A&M-CC": "texas-am-corpus-christi",
     "Penn": "pennsylvania",
     "Army": "army",
     "Navy": "navy",
@@ -331,12 +360,15 @@ def fetch_all_players(season=CURRENT_SEASON):
             p for p in parsed_players 
             if (p.get('minutes_pct') or 0) >= MIN_MINUTES_PER_GAME
         ]
-        
-        # Sort by PPG for display order
+
+        # Sort by minutes (primary rotation guys first)
         rotation_players.sort(
-            key=lambda x: (x.get('ppg') or 0),
+            key=lambda x: (x.get('minutes_pct') or 0),
             reverse=True
         )
+
+        # Cap at 10 players max
+        rotation_players = rotation_players[:10]
         
         # Insert into database
         inserted = 0

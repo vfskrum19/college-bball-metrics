@@ -11,7 +11,7 @@ import re
 
 PROJECT_ROOT = Path(__file__).parent.parent
 DATABASE = PROJECT_ROOT / 'database' / 'kenpom.db'
-CURRENT_SEASON = 2025
+CURRENT_SEASON = 2026
 
 def get_db():
     db = sqlite3.connect(DATABASE)
