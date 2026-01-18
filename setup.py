@@ -20,26 +20,53 @@ print("="*70)
 print("\n1. Initializing database...")
 run("python database/init_db.py")
 
-# Step 2: Fetch KenPom data
-print("\n2. Fetching KenPom data...")
+# Step 2: Add player tables
+print("\n2. Adding player tables...")
+run("python database/add_player_tables.py")
+
+# Step 3: Fetch KenPom data
+print("\n3. Fetching KenPom data...")
 run("python scrapers/fetch_data.py")
 
-# Step 3: Fetch ESPN branding
-print("\n3. Fetching ESPN branding...")
+# Step 4: Fetch ESPN branding
+print("\n4. Fetching ESPN branding...")
 run("python scrapers/fetch_espn_branding.py")
 
-# Step 4: Import NCAA data
-print("\n4. Importing NCAA data...")
+# Step 5: Import NCAA data
+print("\n5. Importing NCAA data...")
 run("python scrapers/import_ncaa_data.py NCAA_Statistics.csv")
 
-# Step 5: Import Bracket Matrix
-print("\n5. Importing Bracket Matrix...")
+# Step 6: Import Bracket Matrix
+print("\n6. Importing Bracket Matrix...")
 run("python scrapers/import_bracket_matrix.py")
 
-# Step 6: Verify
-print("\n6. Verifying database...")
+# Step 7: Verify
+print("\n7. Verifying database...")
 run("python utils/verify_database.py")
 
 print("\n" + "="*70)
 print("SETUP COMPLETE!")
 print("="*70)
+
+print("\n" + "-"*70)
+print("FIRST TIME SETUP: Run these scrapers once to populate player data")
+print("-"*70)
+print("""
+1. Fetch player stats from Sports Reference (~12-15 min):
+
+    python scrapers/fetch_players_sportsref.py
+
+2. Fetch player headshots from ESPN (~5 min):
+
+    python scrapers/fetch_headshots.py
+
+These only need to be run ONCE unless you wipe the database.
+
+To refresh player stats weekly (optional):
+
+    python scrapers/fetch_players_sportsref.py
+
+To re-assign roles without re-scraping:
+
+    python scrapers/fetch_players_sportsref.py roles
+""")

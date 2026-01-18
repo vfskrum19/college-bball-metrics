@@ -11,6 +11,8 @@ function PlayerCard({ player, compact = false }) {
     const {
         name,
         position,
+        height,
+        weight,
         headshot_url,
         ppg,
         rpg,
@@ -45,6 +47,11 @@ function PlayerCard({ player, compact = false }) {
 
     const roleBadge = getRoleBadge();
 
+    // Format physical stats
+    const physicalStats = [height, weight ? `${weight} lbs` : null]
+        .filter(Boolean)
+        .join(' • ');
+
     if (compact) {
         // Compact view for matchup previews
         return (
@@ -58,13 +65,17 @@ function PlayerCard({ player, compact = false }) {
                 </div>
                 <div className="player-info-compact">
                     <span className="player-name-compact">{name}</span>
-                    {roleBadge && (
-                        <span className={`role-badge-compact ${roleBadge.className}`}>
-                            {roleBadge.label}
-                        </span>
-                    )}
+                    <div className="player-meta-compact">
+                        {roleBadge && (
+                            <span className={`role-badge-compact ${roleBadge.className}`}>
+                                {roleBadge.label}
+                            </span>
+                        )}
+                        {position && <span className="player-position-compact">{position}</span>}
+                        {physicalStats && <span className="player-physical">{physicalStats}</span>}
+                    </div>
                     <span className="player-stats-compact">
-                        {formatStat(ppg)} PPG
+                        {formatStat(ppg)} PPG • {formatStat(rpg)} RPG • {formatStat(apg)} APG
                     </span>
                 </div>
             </div>
@@ -84,7 +95,10 @@ function PlayerCard({ player, compact = false }) {
                 </div>
                 <div className="player-info">
                     <h4 className="player-name">{name}</h4>
-                    {position && <span className="player-position">{position}</span>}
+                    <div className="player-meta">
+                        {position && <span className="player-position">{position}</span>}
+                        {physicalStats && <span className="player-physical">• {physicalStats}</span>}
+                    </div>
                     {roleBadge && (
                         <span className={`role-badge ${roleBadge.className}`}>
                             {roleBadge.label}
@@ -202,7 +216,7 @@ function PlayerList({ teamId, showAll = false }) {
 
 /**
  * KeyPlayersPreview - Compact view for bracket matchup
- * Shows just star and x_factor side by side
+ * Shows just star and x_factor
  */
 function KeyPlayersPreview({ teamId }) {
     const [players, setPlayers] = useState([]);

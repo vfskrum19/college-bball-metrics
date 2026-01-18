@@ -595,3 +595,127 @@
         max-width: 95%;
     }
 }
+
+/* Replace the modal-players section in BracketVisualizer.css with this */
+
+/* Key Players in Matchup Modal */
+.modal-players {
+    padding: 20px;
+    border-top: 1px solid var(--bg-tertiary);
+}
+
+.modal-players h4 {
+    text-align: center;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-secondary);
+    margin-bottom: 15px;
+    padding: 0 20px;
+}
+
+.players-comparison {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+}
+
+.team-players {
+    flex: 1;
+    min-width: 0;
+}
+
+.players-divider {
+    width: 1px;
+    background: var(--bg-tertiary);
+    align-self: stretch;
+}
+
+/* Make star and x-factor on same line per team */
+.key-players-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* Compact player card - horizontal layout */
+.player-card.compact {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    margin-bottom: 0;
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+}
+
+.player-headshot-compact {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    overflow: hidden;
+    background: var(--bg-secondary);
+    flex-shrink: 0;
+}
+
+.player-headshot-compact img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.player-info-compact {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.player-name-compact {
+    font-size: 0.9rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.player-meta-compact {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.player-physical {
+    color: var(--text-secondary);
+}
+
+.role-badge-compact {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 8px;
+    font-size: 0.6rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    flex-shrink: 0;
+}
+
+.player-stats-compact {
+    font-size: 0.75rem;
+    color: var(--text-primary);
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+    .players-comparison {
+        flex-direction: column;
+    }
+    
+    .players-divider {
+        width: 100%;
+        height: 1px;
+    }
+}

@@ -17,6 +17,55 @@ DATABASE = PROJECT_ROOT / 'database' / 'kenpom.db'
 BRACKET_MATRIX_URL = "https://www.bracketmatrix.com"
 CURRENT_SEASON = 2026
 
+# Explicit team name mappings from Bracket Matrix -> KenPom database names
+EXACT_TEAM_MAPPINGS = {
+    # NC teams - critical fixes
+    'NC State': 'N.C. State',
+    'N.C. State': 'N.C. State',
+    'North Carolina State': 'N.C. State',
+    'North Carolina A&T': 'North Carolina A&T',
+    'NC A&T': 'North Carolina A&T',
+    
+    # Other common mismatches
+    'USC': 'USC',
+    'UCF': 'UCF',
+    'Central Florida': 'UCF',
+    'UConn': 'Connecticut',
+    'Connecticut': 'Connecticut',
+    'Miami (FL)': 'Miami FL',
+    'Miami (FLA.)': 'Miami FL',
+    'Miami Florida': 'Miami FL',
+    'Miami (OH)': 'Miami OH',
+    'Miami Ohio': 'Miami OH',
+    'Ole Miss': 'Mississippi',
+    'Mississippi': 'Mississippi',
+    "St. John's": "St. John's",
+    "Saint John's": "St. John's",
+    "St. Mary's": "Saint Mary's",
+    "Saint Mary's (CA)": "Saint Mary's",
+    "St. Mary's (CA)": "Saint Mary's",
+    'LSU': 'LSU',
+    'Louisiana State': 'LSU',
+    'BYU': 'BYU',
+    'Brigham Young': 'BYU',
+    'VCU': 'VCU',
+    'Virginia Commonwealth': 'VCU',
+    'SMU': 'SMU',
+    'Southern Methodist': 'SMU',
+    'TCU': 'TCU',
+    'Texas Christian': 'TCU',
+    'UNLV': 'UNLV',
+    'Nevada-Las Vegas': 'UNLV',
+    'Pitt': 'Pittsburgh',
+    'Pittsburgh': 'Pittsburgh',
+    'UMass': 'Massachusetts',
+    'Massachusetts': 'Massachusetts',
+    'Long Island': 'LIU',
+    'LIU': 'LIU',
+    'Tennessee-Martin': 'UT Martin',
+    'UT Martin': 'UT Martin',
+}
+
 def get_db():
     """Get database connection"""
     db = sqlite3.connect(DATABASE)
@@ -29,40 +78,25 @@ def similarity(a, b):
 
 def normalize_name(name):
     """Normalize team names for better matching"""
-    # Handle specific known mappings first (before lowercasing)
-    exact_mappings = {
-        'USC': 'USC',  # Keep USC as-is
-        'Central Florida': 'UCF',
-        'Tennessee-Martin': 'UT Martin',
-        'Long Island': 'LIU',
-        'Miami (FLA.)': 'Miami FL',
-        'Miami (FL)': 'Miami FL',
-        'St. Mary\'s (CA)': 'Saint Mary\'s',
-        'St. Mary\'s': 'Saint Mary\'s',
-        'St. John\'s': 'St. John\'s',
-    }
-    
-    # Check exact mappings first
-    if name in exact_mappings:
-        return exact_mappings[name]
+    # Check exact mappings first - this is the critical fix
+    if name in EXACT_TEAM_MAPPINGS:
+        return EXACT_TEAM_MAPPINGS[name]
     
     # Now do general normalization
-    name = name.lower().strip()
+    normalized = name.lower().strip()
     
+    # Don't replace 'state' with 'st.' anymore - it causes issues
     replacements = {
-        'state': 'st.',
-        'saint': 'st.',
-        'st ': 'st. ',
         'university': '',
         'college': '',
         ' the ': ' ',
     }
     
     for old, new in replacements.items():
-        name = name.replace(old, new)
+        normalized = normalized.replace(old, new)
     
-    name = ' '.join(name.split())
-    return name
+    normalized = ' '.join(normalized.split())
+    return normalized
 
 def scrape_bracket_matrix():
     """
@@ -158,11 +192,44 @@ def match_bracket_teams_to_database(bracket_teams, season=CURRENT_SEASON):
     
     kenpom_teams_list = [{'team_id': t['team_id'], 'name': t['name']} for t in kenpom_teams]
     
+    # Build a lookup dict for exact matches
+    kenpom_by_name = {t['name']: t for t in kenpom_teams_list}
+    kenpom_by_name_lower = {t['name'].lower(): t for t in kenpom_teams_list}
+    
     matches = []
     unmatched = []
     
     for bracket_team in bracket_teams:
         bm_name = bracket_team['team_name']
+        
+        # First, check exact mappings
+        if bm_name in EXACT_TEAM_MAPPINGS:
+            mapped_name = EXACT_TEAM_MAPPINGS[bm_name]
+            if mapped_name in kenpom_by_name:
+                matches.append({
+                    'team_id': kenpom_by_name[mapped_name]['team_id'],
+                    'team_name': mapped_name,
+                    'bracket_matrix_name': bm_name,
+                    'seed': bracket_team['seed'],
+                    'region': bracket_team['region'],
+                    'confidence': 1.0  # Exact match
+                })
+                continue
+        
+        # Check exact name match (case-insensitive)
+        if bm_name.lower() in kenpom_by_name_lower:
+            team = kenpom_by_name_lower[bm_name.lower()]
+            matches.append({
+                'team_id': team['team_id'],
+                'team_name': team['name'],
+                'bracket_matrix_name': bm_name,
+                'seed': bracket_team['seed'],
+                'region': bracket_team['region'],
+                'confidence': 1.0
+            })
+            continue
+        
+        # Fall back to fuzzy matching
         bm_normalized = normalize_name(bm_name)
         
         best_match = None
