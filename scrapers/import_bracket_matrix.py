@@ -64,6 +64,7 @@ EXACT_TEAM_MAPPINGS = {
     'LIU': 'LIU',
     'Tennessee-Martin': 'UT Martin',
     'UT Martin': 'UT Martin',
+    'McNeese State': 'McNeese',
 }
 
 def get_db():

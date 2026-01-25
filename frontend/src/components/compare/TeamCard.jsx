@@ -1,5 +1,41 @@
 import { PlayerList } from '../player/PlayerCard';
 
+/**
+ * Calculate relative luminance of a hex color
+ * Returns value between 0 (black) and 1 (white)
+ */
+function getLuminance(hexColor) {
+    // Handle missing or invalid colors
+    if (!hexColor || typeof hexColor !== 'string') return 1;
+    
+    // Remove # if present
+    const hex = hexColor.replace('#', '');
+    
+    // Validate hex length
+    if (hex.length !== 6 && hex.length !== 3) return 1;
+    
+    // Parse RGB values
+    const r = parseInt(hex.substr(0, 2), 16) / 255;
+    const g = parseInt(hex.substr(2, 2), 16) / 255;
+    const b = parseInt(hex.substr(4, 2), 16) / 255;
+    
+    // Apply gamma correction
+    const rLinear = r <= 0.03928 ? r / 12.92 : Math.pow((r + 0.055) / 1.055, 2.4);
+    const gLinear = g <= 0.03928 ? g / 12.92 : Math.pow((g + 0.055) / 1.055, 2.4);
+    const bLinear = b <= 0.03928 ? b / 12.92 : Math.pow((b + 0.055) / 1.055, 2.4);
+    
+    // Calculate luminance (human eye is most sensitive to green)
+    return 0.2126 * rLinear + 0.7152 * gLinear + 0.0722 * bLinear;
+}
+
+/**
+ * Determine if a color is "light" enough for dark text
+ * Threshold of 0.4 - higher = more likely to be considered "light"
+ */
+function isColorLight(hexColor) {
+    return getLuminance(hexColor) > 0.1;
+}
+
 function TeamCard({ data, showPlayers = true }) {
     const { team, ratings, four_factors, resume } = data;
 
@@ -15,6 +51,26 @@ function TeamCard({ data, showPlayers = true }) {
 
     const primaryColor = team.primary_color || '#4A9EFF';
     const secondaryColor = team.secondary_color || '#FFFFFF';
+    
+    // Use secondary color as background, but fall back to white if secondary is also dark
+    const secondaryIsLight = isColorLight(secondaryColor);
+    const headerBgColor = secondaryIsLight ? secondaryColor : '#FFFFFF';
+    
+    // Determine text color based on header background
+    const headerBgIsLight = isColorLight(headerBgColor);
+    const headerTextColor = headerBgIsLight ? primaryColor : '#FFFFFF';
+    const headerSubTextColor = headerBgIsLight ? '#333333' : '#E0E0E0';
+    
+    // Header styles using secondary color (or white fallback)
+    const headerStyle = {
+        background: `linear-gradient(135deg, ${headerBgColor} 0%, ${headerBgColor}DD 100%)`,
+        borderRadius: '8px',
+        padding: '15px',
+        marginBottom: '15px',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+    };
+    
+    const titleColor = headerTextColor;
 
     return (
         <div className="team-card" style={{
@@ -24,17 +80,19 @@ function TeamCard({ data, showPlayers = true }) {
                 background: `linear-gradient(90deg, ${primaryColor} 0%, ${secondaryColor} 100%)`
             }}></div>
             <div className="card-content">
-                <div className="team-header">
+                <div className="team-header" style={headerStyle}>
                     {team.logo_url && (
                         <div className="team-logo-container">
                             <img src={team.logo_url} alt={team.name} className="team-logo" />
                         </div>
                     )}
                     <div className="team-info-container">
-                        <h2 className="team-title" style={{color: primaryColor}}>{team.name}</h2>
-                        <div className="team-info">
+                        <h2 className="team-title" style={{color: titleColor}}>{team.name}</h2>
+                        <div className="team-info" style={{ color: titleColor }}>
                             {team.conference} • {team.coach}<br />
-                            <span className="record">{ratings.wins}-{ratings.losses}</span>
+                            <span className="record" style={{ color: headerTextColor, fontWeight: 600 }}>
+                                {ratings.wins}-{ratings.losses}
+                            </span>
                         </div>
                     </div>
                 </div>

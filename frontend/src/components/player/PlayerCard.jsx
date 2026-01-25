@@ -11,6 +11,7 @@ function PlayerCard({ player, compact = false }) {
     const {
         name,
         position,
+        jersey_number,
         height,
         weight,
         headshot_url,
@@ -20,6 +21,11 @@ function PlayerCard({ player, compact = false }) {
         fg_pct,
         three_pct,
         ft_pct,
+        // Advanced stats
+        usage_pct,
+        bpm,
+        per,
+        ts_pct,
         role,
         role_reason
     } = player;
@@ -47,13 +53,15 @@ function PlayerCard({ player, compact = false }) {
 
     const roleBadge = getRoleBadge();
 
-    // Format physical stats
-    const physicalStats = [height, weight ? `${weight} lbs` : null]
-        .filter(Boolean)
-        .join(' • ');
+    // Format height/weight for display
+    const heightDisplay = height || null;
+    const weightDisplay = weight ? `${weight} lbs` : null;
 
     if (compact) {
         // Compact view for matchup previews
+        // Line 1: #Number Name + Role Badge
+        // Line 2: Position • Height • Weight
+        // Line 3: Stats
         return (
             <div className="player-card compact">
                 <div className="player-headshot-compact">
@@ -64,19 +72,32 @@ function PlayerCard({ player, compact = false }) {
                     )}
                 </div>
                 <div className="player-info-compact">
-                    <span className="player-name-compact">{name}</span>
-                    <div className="player-meta-compact">
+                    {/* Line 1: Number and Name */}
+                    <div className="player-name-row">
+                        {(jersey_number !== null && jersey_number !== '' && jersey_number !== undefined) && (
+                            <span className="player-number-compact">#{jersey_number}</span>
+                        )}
+                        <span className="player-name-compact">{name}</span>
+                    </div>
+                    
+                    {/* Line 2: Position, Height, Weight, Role Badge */}
+                    <div className="player-physical-row">
+                        {position && <span className="player-position-compact">{position}</span>}
+                        {heightDisplay && <span className="player-height-compact">{heightDisplay}</span>}
+                        {weightDisplay && <span className="player-weight-compact">{weightDisplay}</span>}
                         {roleBadge && (
                             <span className={`role-badge-compact ${roleBadge.className}`}>
                                 {roleBadge.label}
                             </span>
                         )}
-                        {position && <span className="player-position-compact">{position}</span>}
-                        {physicalStats && <span className="player-physical">{physicalStats}</span>}
                     </div>
-                    <span className="player-stats-compact">
-                        {formatStat(ppg)} PPG • {formatStat(rpg)} RPG • {formatStat(apg)} APG
-                    </span>
+                    
+                    {/* Line 3: Stats */}
+                    <div className="player-stats-row">
+                        <span className="player-stats-compact">
+                            {formatStat(ppg)} PPG • {formatStat(rpg)} RPG • {formatStat(apg)} APG
+                        </span>
+                    </div>
                 </div>
             </div>
         );
@@ -94,10 +115,14 @@ function PlayerCard({ player, compact = false }) {
                     )}
                 </div>
                 <div className="player-info">
-                    <h4 className="player-name">{name}</h4>
+                    <h4 className="player-name">
+                        {jersey_number && <span className="player-number">#{jersey_number}</span>}
+                        {name}
+                    </h4>
                     <div className="player-meta">
                         {position && <span className="player-position">{position}</span>}
-                        {physicalStats && <span className="player-physical">• {physicalStats}</span>}
+                        {heightDisplay && <span className="player-height">• {heightDisplay}</span>}
+                        {weightDisplay && <span className="player-weight">• {weightDisplay}</span>}
                     </div>
                     {roleBadge && (
                         <span className={`role-badge ${roleBadge.className}`}>
@@ -138,6 +163,30 @@ function PlayerCard({ player, compact = false }) {
                         <span className="stat-label">FT%</span>
                     </div>
                 </div>
+
+                {/* Advanced Stats Row - only show if we have the data */}
+                {(bpm !== null || usage_pct !== null || per !== null) && (
+                    <div className="stat-row advanced-stats">
+                        <div className="stat">
+                            <span className={`stat-value ${bpm > 0 ? 'positive' : bpm < 0 ? 'negative' : ''}`}>
+                                {bpm > 0 ? '+' : ''}{formatStat(bpm)}
+                            </span>
+                            <span className="stat-label">BPM</span>
+                        </div>
+                        <div className="stat">
+                            <span className="stat-value">{formatStat(usage_pct)}%</span>
+                            <span className="stat-label">USG</span>
+                        </div>
+                        <div className="stat">
+                            <span className="stat-value">{formatStat(per)}</span>
+                            <span className="stat-label">PER</span>
+                        </div>
+                        <div className="stat">
+                            <span className="stat-value">{formatStat(ts_pct)}%</span>
+                            <span className="stat-label">TS%</span>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

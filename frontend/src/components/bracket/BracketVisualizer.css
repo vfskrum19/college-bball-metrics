@@ -58,10 +58,31 @@
     gap: 12px;
 }
 
-/* Individual Matchup */
+/* Individual Matchup - NOW CLICKABLE AS A WHOLE */
 .matchup {
     display: flex;
     align-items: center;
+    border-radius: 8px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.matchup.clickable {
+    cursor: pointer;
+}
+
+.matchup.clickable:hover {
+    transform: translateX(4px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.matchup.clickable:hover .matchup-inner {
+    background: var(--bg-secondary);
+    border-color: var(--accent-primary);
+}
+
+.matchup.selected .matchup-inner {
+    background: rgba(102, 126, 234, 0.15);
+    box-shadow: inset 0 0 0 2px var(--accent-primary);
 }
 
 .matchup-inner {
@@ -69,7 +90,8 @@
     background: var(--bg-tertiary);
     border-radius: 8px;
     overflow: hidden;
-    transition: box-shadow 0.2s ease;
+    transition: background 0.2s ease, border-color 0.2s ease;
+    border: 2px solid transparent;
 }
 
 .matchup-divider {
@@ -77,7 +99,7 @@
     background: var(--bg-secondary);
 }
 
-/* Team Row */
+/* Team Row - No longer individually clickable */
 .team-row {
     display: flex;
     align-items: center;
@@ -85,21 +107,10 @@
     gap: 10px;
     position: relative;
     transition: background 0.2s ease;
-    cursor: pointer;
-}
-
-.team-row:hover {
-    background: rgba(255, 255, 255, 0.08);
-}
-
-.team-row.selected {
-    background: rgba(102, 126, 234, 0.2);
-    box-shadow: inset 0 0 0 2px var(--accent-primary);
 }
 
 .team-row.empty {
     opacity: 0.5;
-    cursor: default;
 }
 
 .team-color-bar {
@@ -284,14 +295,14 @@
     gap: 15px;
 }
 
+/* Team Card in Modal - WITH TEAM COLORS */
 .modal-team {
     flex: 1;
-    text-align: center;
-    padding: 20px 15px;
-    background: var(--bg-tertiary);
+    background: var(--team-bg, #FFFFFF);
     border-radius: 10px;
     border-top: 4px solid var(--team-color);
     transition: transform 0.2s ease, box-shadow 0.2s ease;
+    overflow: hidden;
 }
 
 .modal-team.clickable {
@@ -300,7 +311,15 @@
 
 .modal-team.clickable:hover {
     transform: translateY(-3px);
-    box-shadow: 0 5px 20px rgba(102, 126, 234, 0.3);
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+}
+
+.modal-team-header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px 15px 15px;
+    text-align: center;
 }
 
 .modal-team img {
@@ -318,8 +337,9 @@
 
 .modal-seed {
     font-size: 0.75rem;
-    color: var(--text-secondary);
+    color: var(--team-text, #000);
     text-transform: uppercase;
+    font-weight: 600;
 }
 
 .modal-name-row {
@@ -332,26 +352,37 @@
 .modal-name {
     font-weight: 700;
     font-size: 1.1rem;
+    color: var(--team-text, #000);
+}
+
+.modal-team-meta {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
 }
 
 .modal-record {
     font-size: 0.9rem;
-    color: var(--text-secondary);
+    color: var(--team-text, #000);
+    font-weight: 600;
 }
 
 .modal-conf {
     font-size: 0.85rem;
-    color: var(--text-secondary);
+    color: var(--team-text, #000);
 }
 
 .click-hint {
     display: block;
-    margin-top: 10px;
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.05);
     font-size: 0.7rem;
-    color: var(--accent-primary);
+    color: var(--team-text, #000);
     text-transform: uppercase;
     letter-spacing: 1px;
-    opacity: 0.8;
+    opacity: 0.7;
+    text-align: center;
 }
 
 .modal-vs {
@@ -559,7 +590,52 @@
     color: var(--error);
 }
 
-/* Responsive */
+/* ============================================================
+   KEY PLAYERS IN MATCHUP MODAL
+   ============================================================ */
+
+.modal-players {
+    padding: 20px;
+    border-top: 1px solid var(--bg-tertiary);
+}
+
+.modal-players h4 {
+    text-align: center;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-secondary);
+    margin-bottom: 15px;
+    padding: 0 20px;
+}
+
+.players-comparison {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+}
+
+.team-players {
+    flex: 1;
+    min-width: 0;
+}
+
+.players-divider {
+    width: 1px;
+    background: var(--bg-tertiary);
+    align-self: stretch;
+}
+
+.key-players-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+
 @media (max-width: 600px) {
     .modal-matchup {
         flex-direction: column;
@@ -594,122 +670,7 @@
     .team-card-modal {
         max-width: 95%;
     }
-}
-
-/* Replace the modal-players section in BracketVisualizer.css with this */
-
-/* Key Players in Matchup Modal */
-.modal-players {
-    padding: 20px;
-    border-top: 1px solid var(--bg-tertiary);
-}
-
-.modal-players h4 {
-    text-align: center;
-    font-size: 0.85rem;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    color: var(--text-secondary);
-    margin-bottom: 15px;
-    padding: 0 20px;
-}
-
-.players-comparison {
-    display: flex;
-    gap: 10px;
-    align-items: flex-start;
-}
-
-.team-players {
-    flex: 1;
-    min-width: 0;
-}
-
-.players-divider {
-    width: 1px;
-    background: var(--bg-tertiary);
-    align-self: stretch;
-}
-
-/* Make star and x-factor on same line per team */
-.key-players-preview {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-/* Compact player card - horizontal layout */
-.player-card.compact {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 10px;
-    margin-bottom: 0;
-    background: var(--bg-tertiary);
-    border-radius: 8px;
-}
-
-.player-headshot-compact {
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    overflow: hidden;
-    background: var(--bg-secondary);
-    flex-shrink: 0;
-}
-
-.player-headshot-compact img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-}
-
-.player-info-compact {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-}
-
-.player-name-compact {
-    font-size: 0.9rem;
-    font-weight: 600;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.player-meta-compact {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-}
-
-.player-physical {
-    color: var(--text-secondary);
-}
-
-.role-badge-compact {
-    display: inline-block;
-    padding: 2px 6px;
-    border-radius: 8px;
-    font-size: 0.6rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    flex-shrink: 0;
-}
-
-.player-stats-compact {
-    font-size: 0.75rem;
-    color: var(--text-primary);
-    font-weight: 500;
-    white-space: nowrap;
-}
-
-@media (max-width: 600px) {
+    
     .players-comparison {
         flex-direction: column;
     }

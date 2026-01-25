@@ -26,8 +26,6 @@ HEADERS = {
 }
 
 # Team name mapping overrides
-# Complete TEAM_SLUG_OVERRIDES - Replace the existing one in fetch_players_sportsref.py
-
 TEAM_SLUG_OVERRIDES = {
     # State schools (St. -> state)
     "Alabama St.": "alabama-state",
@@ -191,6 +189,25 @@ def get_db():
     db.row_factory = sqlite3.Row
     return db
 
+def normalize_player_name(name):
+    """
+    Normalize player name by removing suffixes for matching purposes.
+    Sports Reference roster table often lacks suffixes that stats table has.
+    """
+    if not name:
+        return name
+    
+    # Common suffixes to strip (order matters - check longer ones first)
+    suffixes = [' Jr.', ' Jr', ' Sr.', ' Sr', ' III', ' II', ' IV', ' V']
+    
+    normalized = name.strip()
+    for suffix in suffixes:
+        if normalized.endswith(suffix):
+            normalized = normalized[:-len(suffix)].strip()
+            break
+    
+    return normalized
+
 def team_name_to_slug(team_name):
     """Convert team name to Sports Reference URL slug"""
     if team_name in TEAM_SLUG_OVERRIDES:
@@ -210,7 +227,7 @@ def team_name_to_slug(team_name):
 def fetch_team_roster(team_slug, season=CURRENT_SEASON):
     """
     Fetch roster and stats from Sports Reference team page
-    Uses players_per_game table for stats
+    Scrapes both 'roster' table (physical info) and 'players_per_game' (stats)
     """
     url = f"{SR_BASE}/schools/{team_slug}/men/{season}.html"
     
@@ -218,49 +235,114 @@ def fetch_team_roster(team_slug, season=CURRENT_SEASON):
         response = requests.get(url, headers=HEADERS, timeout=15)
         
         if response.status_code == 404:
-            return None, "Team not found"
+            return None, None, None, "Team not found"
         
         response.raise_for_status()
         soup = BeautifulSoup(response.content, 'html.parser')
         
-        players = []
+        # ============================================
+        # 1. Scrape ROSTER table (jersey, height, weight, class)
+        # ============================================
+        roster_data = {}
+        roster_table = soup.find('table', {'id': 'roster'})
         
-        # Use players_per_game table - has per-game stats
+        if roster_table:
+            tbody = roster_table.find('tbody')
+            if tbody:
+                for row in tbody.find_all('tr'):
+                    if row.get('class') and 'thead' in row.get('class'):
+                        continue
+                    
+                    player_info = {}
+                    for cell in row.find_all(['td', 'th']):
+                        stat = cell.get('data-stat')
+                        value = cell.get_text(strip=True)
+                        if stat and value:
+                            player_info[stat] = value
+                    
+                    # Key by player name for merging later
+                    player_name = player_info.get('player', '')
+                    if player_name:
+                        roster_data[player_name] = {
+                            'jersey_number': player_info.get('number', ''),
+                            'height': player_info.get('height', ''),
+                            'weight': player_info.get('weight', ''),
+                            'year': player_info.get('class', ''),
+                        }
+        
+        # ============================================
+        # 2. Scrape PLAYERS_PER_GAME table (stats)
+        # ============================================
+        stats_players = []
         stats_table = soup.find('table', {'id': 'players_per_game'})
         
         if not stats_table:
-            return None, "No players_per_game table found"
+            return None, None, None, "No players_per_game table found"
         
         tbody = stats_table.find('tbody')
         if not tbody:
-            return None, "No table body"
+            return None, None, None, "No table body"
         
-        rows = tbody.find_all('tr')
-        
-        for row in rows:
-            # Skip header rows
+        for row in tbody.find_all('tr'):
             if row.get('class') and 'thead' in row.get('class'):
                 continue
             
             player_data = {}
-            
             for cell in row.find_all(['td', 'th']):
                 stat = cell.get('data-stat')
                 value = cell.get_text(strip=True)
-                
                 if stat and value:
                     player_data[stat] = value
             
-            # Need at least a player name
             if player_data.get('name_display'):
-                players.append(player_data)
+                stats_players.append(player_data)
         
-        return players, None
+        # ============================================
+        # 3. Scrape ADVANCED table (advanced stats)
+        #    Note: Sports Reference hides this in HTML comments
+        # ============================================
+        advanced_data = {}
+        
+        # First try to find it directly
+        advanced_table = soup.find('table', {'id': 'players_advanced'})
+        
+        # If not found, look in HTML comments
+        if not advanced_table:
+            from bs4 import Comment
+            comments = soup.find_all(string=lambda text: isinstance(text, Comment))
+            for comment in comments:
+                if 'id="players_advanced"' in comment:
+                    # Parse the comment as HTML
+                    comment_soup = BeautifulSoup(comment, 'html.parser')
+                    advanced_table = comment_soup.find('table', {'id': 'players_advanced'})
+                    if advanced_table:
+                        break
+        
+        if advanced_table:
+            tbody = advanced_table.find('tbody')
+            if tbody:
+                for row in tbody.find_all('tr'):
+                    if row.get('class') and 'thead' in row.get('class'):
+                        continue
+                    
+                    player_adv = {}
+                    for cell in row.find_all(['td', 'th']):
+                        stat = cell.get('data-stat')
+                        value = cell.get_text(strip=True)
+                        if stat and value:
+                            player_adv[stat] = value
+                    
+                    # Key by player name for merging
+                    player_name = player_adv.get('name_display', '')
+                    if player_name:
+                        advanced_data[player_name] = player_adv
+        
+        return stats_players, roster_data, advanced_data, None
         
     except requests.exceptions.Timeout:
-        return None, "Timeout"
+        return None, None, None, "Timeout"
     except requests.exceptions.RequestException as e:
-        return None, str(e)
+        return None, None, None, str(e)
 
 def safe_float(val):
     """Safely convert to float"""
@@ -280,27 +362,85 @@ def safe_int(val):
     except (ValueError, TypeError):
         return None
 
-def parse_player_stats(raw):
-    """Parse raw stats dict into our database format"""
+def parse_player_stats(raw_stats, roster_info=None, advanced_info=None):
+    """
+    Parse raw stats dict into our database format
+    Merges stats from players_per_game with roster info and advanced stats
+    """
+    player_name = raw_stats.get('name_display', '')
+    
+    # Get roster info if available (jersey, height, weight, year)
+    roster = roster_info or {}
+    
+    # Get advanced stats if available
+    adv = advanced_info or {}
+    
     return {
-        'name': raw.get('name_display', ''),
-        'position': raw.get('pos', ''),
-        'games_played': safe_int(raw.get('games')),
-        'games_started': safe_int(raw.get('games_started')),
-        'minutes_pct': safe_float(raw.get('mp_per_g')),
-        'ppg': safe_float(raw.get('pts_per_g')),
-        'rpg': safe_float(raw.get('trb_per_g')),
-        'apg': safe_float(raw.get('ast_per_g')),
-        'spg': safe_float(raw.get('stl_per_g')),
-        'bpg': safe_float(raw.get('blk_per_g')),
-        'fg_pct': safe_float(raw.get('fg_pct')),
-        'three_pct': safe_float(raw.get('fg3_pct')),
-        'ft_pct': safe_float(raw.get('ft_pct')),
-        'efg_pct': safe_float(raw.get('efg_pct')),
-        'orb_per_g': safe_float(raw.get('orb_per_g')),
-        'drb_per_g': safe_float(raw.get('drb_per_g')),
-        'tov_per_g': safe_float(raw.get('tov_per_g')),
+        'name': player_name,
+        'position': raw_stats.get('pos', ''),
+        'jersey_number': roster.get('jersey_number', ''),
+        'height': roster.get('height', ''),
+        'weight': roster.get('weight', ''),
+        'year': roster.get('year', ''),
+        'games_played': safe_int(raw_stats.get('games')),
+        'games_started': safe_int(raw_stats.get('games_started')),
+        'minutes_pct': safe_float(raw_stats.get('mp_per_g')),
+        'ppg': safe_float(raw_stats.get('pts_per_g')),
+        'rpg': safe_float(raw_stats.get('trb_per_g')),
+        'apg': safe_float(raw_stats.get('ast_per_g')),
+        'spg': safe_float(raw_stats.get('stl_per_g')),
+        'bpg': safe_float(raw_stats.get('blk_per_g')),
+        'fg_pct': safe_float(raw_stats.get('fg_pct')),
+        'three_pct': safe_float(raw_stats.get('fg3_pct')),
+        'ft_pct': safe_float(raw_stats.get('ft_pct')),
+        'efg_pct': safe_float(raw_stats.get('efg_pct')),
+        'orb_per_g': safe_float(raw_stats.get('orb_per_g')),
+        'drb_per_g': safe_float(raw_stats.get('drb_per_g')),
+        'tov_per_g': safe_float(raw_stats.get('tov_per_g')),
+        # Advanced stats
+        'usage_pct': safe_float(adv.get('usg_pct')),
+        'ortg': None,  # Not available in advanced table
+        'drtg': None,  # Not available in advanced table
+        'bpm': safe_float(adv.get('bpm')),
+        'obpm': safe_float(adv.get('obpm')),
+        'dbpm': safe_float(adv.get('dbpm')),
+        'ws': safe_float(adv.get('ws')),
+        'ws_40': safe_float(adv.get('ws_per_40')),
+        'ast_pct': safe_float(adv.get('ast_pct')),
+        'tov_pct': safe_float(adv.get('tov_pct')),
+        'orb_pct': safe_float(adv.get('orb_pct')),
+        'drb_pct': safe_float(adv.get('drb_pct')),
+        'stl_pct': safe_float(adv.get('stl_pct')),
+        'blk_pct': safe_float(adv.get('blk_pct')),
+        'per': safe_float(adv.get('per')),
+        'ts_pct': safe_float(adv.get('ts_pct')),
     }
+
+def find_roster_info(player_name, roster_data):
+    """
+    Find roster info for a player, handling suffix mismatches.
+    Sports Reference roster table often lacks suffixes (Jr., Sr., III, etc.)
+    that the stats table includes.
+    """
+    if not roster_data:
+        return {}
+    
+    # Try exact match first
+    if player_name in roster_data:
+        return roster_data[player_name]
+    
+    # Try normalized name (without suffix)
+    normalized_name = normalize_player_name(player_name)
+    if normalized_name in roster_data:
+        return roster_data[normalized_name]
+    
+    # Try matching normalized versions of both names
+    for roster_name, roster_vals in roster_data.items():
+        if normalize_player_name(roster_name) == normalized_name:
+            return roster_vals
+    
+    # No match found
+    return {}
 
 def fetch_all_players(season=CURRENT_SEASON):
     """Fetch player data for all teams in database"""
@@ -336,8 +476,8 @@ def fetch_all_players(season=CURRENT_SEASON):
         
         print(f"[{i+1}/{len(teams)}] {team_name}...", end=" ", flush=True)
         
-        # Fetch from Sports Reference
-        players_raw, error = fetch_team_roster(team_slug, season)
+        # Fetch from Sports Reference (now returns stats, roster, and advanced)
+        stats_players, roster_data, advanced_data, error = fetch_team_roster(team_slug, season)
         
         if error:
             print(f"✗ {error}")
@@ -345,14 +485,25 @@ def fetch_all_players(season=CURRENT_SEASON):
             time.sleep(1)
             continue
         
-        if not players_raw:
+        if not stats_players:
             print("✗ No players")
             failed_teams.append((team_name, team_slug, "No players"))
             time.sleep(1)
             continue
         
-        # Parse and filter by minutes threshold
-        parsed_players = [parse_player_stats(p) for p in players_raw]
+        # Parse and merge roster info + advanced stats with basic stats
+        parsed_players = []
+        for p in stats_players:
+            player_name = p.get('name_display', '')
+            
+            # Find matching roster info (handles suffix mismatches)
+            roster_info = find_roster_info(player_name, roster_data)
+            
+            # Try to find matching advanced stats
+            adv_info = advanced_data.get(player_name, {}) if advanced_data else {}
+            
+            parsed_players.append(parse_player_stats(p, roster_info, adv_info))
+        
         parsed_players = [p for p in parsed_players if p['name']]
         
         # Filter: only players with 10%+ minutes (4+ min/game)
@@ -373,31 +524,43 @@ def fetch_all_players(season=CURRENT_SEASON):
         # Insert into database
         inserted = 0
         for player in rotation_players:
-            # Insert player
+            # Insert player (now includes jersey_number, height, year)
             cursor.execute('''
                 INSERT INTO players (
-                    player_id, team_id, name, position, season
+                    player_id, team_id, name, position, 
+                    jersey_number, height, year, season
                 )
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 player_id_counter, team_id, player['name'],
-                player['position'], season
+                player['position'], player['jersey_number'],
+                player['height'], player['year'], season
             ))
             
-            # Insert stats
+            # Insert stats (now includes advanced stats)
             cursor.execute('''
                 INSERT INTO player_stats (
                     player_id, team_id, season, games_played,
                     minutes_pct, ppg, rpg, apg,
-                    fg_pct, three_pct, ft_pct, efg_pct
+                    fg_pct, three_pct, ft_pct, efg_pct,
+                    usage_pct, ortg, drtg, bpm, obpm, dbpm,
+                    ws, ws_40, ast_pct, tov_pct, orb_pct, drb_pct,
+                    stl_pct, blk_pct, per, ts_pct
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 player_id_counter, team_id, season,
                 player['games_played'], player['minutes_pct'],
                 player['ppg'], player['rpg'], player['apg'],
                 player['fg_pct'], player['three_pct'], 
-                player['ft_pct'], player['efg_pct']
+                player['ft_pct'], player['efg_pct'],
+                player['usage_pct'], player['ortg'], player['drtg'],
+                player['bpm'], player['obpm'], player['dbpm'],
+                player['ws'], player['ws_40'],
+                player['ast_pct'], player['tov_pct'],
+                player['orb_pct'], player['drb_pct'],
+                player['stl_pct'], player['blk_pct'],
+                player['per'], player['ts_pct']
             ))
             
             player_id_counter += 1
@@ -436,6 +599,10 @@ def calculate_roles(season=CURRENT_SEASON):
     
     db = get_db()
     cursor = db.cursor()
+    
+    # Clear existing roles first
+    cursor.execute('DELETE FROM team_roles WHERE season = ?', (season,))
+    db.commit()
     
     teams = cursor.execute('''
         SELECT DISTINCT team_id FROM players WHERE season = ?
@@ -525,16 +692,35 @@ if __name__ == '__main__':
             team_slug = sys.argv[2] if len(sys.argv) > 2 else 'arizona'
             print(f"Testing with {team_slug}...")
             print(f"Minutes threshold: {MIN_MINUTES_PER_GAME}+ min/game (10%+)\n")
-            players, error = fetch_team_roster(team_slug)
+            stats_players, roster_data, advanced_data, error = fetch_team_roster(team_slug)
             if error:
                 print(f"Error: {error}")
             else:
-                parsed = [parse_player_stats(p) for p in players]
-                rotation = [p for p in parsed if (p.get('minutes_pct') or 0) >= MIN_MINUTES_PER_GAME]
-                rotation.sort(key=lambda x: x.get('ppg') or 0, reverse=True)
+                # Merge and parse
+                parsed = []
+                for p in stats_players:
+                    name = p.get('name_display', '')
+                    roster_info = find_roster_info(name, roster_data)
+                    adv_info = advanced_data.get(name, {}) if advanced_data else {}
+                    parsed.append(parse_player_stats(p, roster_info, adv_info))
                 
-                print(f"Found {len(players)} total players, {len(rotation)} in rotation:\n")
+                rotation = [p for p in parsed if (p.get('minutes_pct') or 0) >= MIN_MINUTES_PER_GAME]
+                rotation.sort(key=lambda x: x.get('minutes_pct') or 0, reverse=True)
+                rotation = rotation[:10]
+                
+                print(f"Found {len(stats_players)} total players, {len(rotation)} in rotation:\n")
+                print(f"{'#':4s} {'Name':25s} {'Ht/Wt':15s} {'PPG':6s} {'USG%':6s} {'PER':5s} {'BPM':5s} {'WS':4s}")
+                print("-" * 75)
                 for p in rotation:
-                    print(f"  {p['name']}: {p['ppg']} PPG, {p['minutes_pct']} MIN, {p['three_pct']} 3PT%")
+                    jersey = f"#{p['jersey_number']}" if p['jersey_number'] else ""
+                    height = p['height'] or ""
+                    weight = f"{p['weight']} lbs" if p['weight'] else ""
+                    physical = f"{height} {weight}".strip()
+                    ppg = f"{p['ppg']:.1f}" if p['ppg'] else "-"
+                    usg = f"{p['usage_pct']:.1f}" if p['usage_pct'] else "-"
+                    per = f"{p['per']:.1f}" if p['per'] else "-"
+                    bpm = f"{p['bpm']:.1f}" if p['bpm'] else "-"
+                    ws = f"{p['ws']:.1f}" if p['ws'] else "-"
+                    print(f"{jersey:4s} {p['name']:25s} {physical:15s} {ppg:6s} {usg:6s} {per:5s} {bpm:5s} {ws:4s}")
     else:
         full_sync()

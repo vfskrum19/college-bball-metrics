@@ -197,6 +197,19 @@ MANUAL_MAPPINGS = {
     'Youngstown St.': 'YSU',
 }
 
+# Manual color overrides for teams with incorrect/missing ESPN data
+# Format: 'KenPom Name': {'primary': '#HEX', 'secondary': '#HEX'}
+COLOR_OVERRIDES = {
+    # Teams with duplicate colors in ESPN API
+    'San Diego': {'primary': '#002147', 'secondary': '#2f99d4'},       # Navy / Light Blue
+    'Wright St.': {'primary': '#005F3A', 'secondary': '#cba052'},      # Hunter Green / Gold
+    
+    # Teams not in ESPN API (new D1 programs)
+    'Lindenwood': {'primary': '#101820', 'secondary': '#B5A36A'},      # Black / Gold
+    'Queens': {'primary': '#192C66', 'secondary': '#857040'},          # Navy Blue / Vegas Gold
+    'Southern Indiana': {'primary': '#CF102D', 'secondary': '#002D5D'}, # Red / Navy
+}
+
 def get_db():
     """Get database connection"""
     db = sqlite3.connect(DATABASE)
@@ -364,6 +377,35 @@ def update_team_branding(matches):
     db.close()
     print(f"✓ Updated {len(matches)} teams with branding")
 
+def apply_color_overrides(season=2026):
+    """Apply manual color overrides for teams with bad/missing ESPN data"""
+    db = get_db()
+    cursor = db.cursor()
+    
+    override_count = 0
+    for team_name, colors in COLOR_OVERRIDES.items():
+        cursor.execute('''
+            UPDATE teams 
+            SET primary_color = ?, secondary_color = ?
+            WHERE name = ? AND season = ?
+        ''', (
+            colors['primary'],
+            colors['secondary'],
+            team_name,
+            season
+        ))
+        
+        if cursor.rowcount > 0:
+            override_count += 1
+    
+    db.commit()
+    db.close()
+    
+    if override_count > 0:
+        print(f"✓ Applied {override_count} color overrides")
+    
+    return override_count
+
 def sync_espn_branding(season=2026, show_details=False):
     """Main function to sync ESPN branding with KenPom teams"""
     print(f"\n{'='*60}")
@@ -413,10 +455,16 @@ def sync_espn_branding(season=2026, show_details=False):
     # Step 5: Update database
     update_team_branding(matches)
     
-    # Step 6: Report unmatched teams
-    if unmatched:
-        print(f"\n⚠️  {len(unmatched)} teams not matched:")
-        for team in unmatched:
+    # Step 6: Apply color overrides (fixes bad ESPN data + fills in missing)
+    print("\nApplying color overrides...")
+    apply_color_overrides(season)
+    
+    # Step 7: Report unmatched teams (excluding those with overrides)
+    unmatched_without_overrides = [t for t in unmatched if t['kenpom_name'] not in COLOR_OVERRIDES]
+    
+    if unmatched_without_overrides:
+        print(f"\n⚠️  {len(unmatched_without_overrides)} teams not matched:")
+        for team in unmatched_without_overrides:
             print(f"  - {team['kenpom_name']} (ID: {team['kenpom_id']})")
         
         print("\n💡 To manually add branding for these teams:")
@@ -428,7 +476,7 @@ def sync_espn_branding(season=2026, show_details=False):
     print(f"ESPN branding sync complete!")
     print(f"{'='*60}\n")
     
-    return len(unmatched)
+    return len(unmatched_without_overrides)
 
 if __name__ == '__main__':
     import sys

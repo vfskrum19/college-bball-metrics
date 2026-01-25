@@ -3,6 +3,29 @@ import TeamCard from '../compare/TeamCard';
 import { KeyPlayersPreview } from '../player/PlayerCard';
 import './BracketVisualizer.css';
 
+/**
+ * Calculate relative luminance of a hex color
+ */
+function getLuminance(hexColor) {
+    if (!hexColor || typeof hexColor !== 'string') return 1;
+    const hex = hexColor.replace('#', '');
+    if (hex.length !== 6 && hex.length !== 3) return 1;
+    
+    const r = parseInt(hex.substr(0, 2), 16) / 255;
+    const g = parseInt(hex.substr(2, 2), 16) / 255;
+    const b = parseInt(hex.substr(4, 2), 16) / 255;
+    
+    const rLinear = r <= 0.03928 ? r / 12.92 : Math.pow((r + 0.055) / 1.055, 2.4);
+    const gLinear = g <= 0.03928 ? g / 12.92 : Math.pow((g + 0.055) / 1.055, 2.4);
+    const bLinear = b <= 0.03928 ? b / 12.92 : Math.pow((b + 0.055) / 1.055, 2.4);
+    
+    return 0.2126 * rLinear + 0.7152 * gLinear + 0.0722 * bLinear;
+}
+
+function isColorLight(hexColor) {
+    return getLuminance(hexColor) > 0.15;
+}
+
 function BracketVisualizer() {
     const [bracketData, setBracketData] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -83,11 +106,8 @@ function BracketVisualizer() {
         return null;
     };
 
-    const handleTeamClick = (team, region) => {
-        const opponent = findOpponent(team, region);
-        if (opponent) {
-            const highTeam = team.seed < opponent.seed ? team : opponent;
-            const lowTeam = team.seed < opponent.seed ? opponent : team;
+    const handleMatchupClick = (highTeam, lowTeam, region) => {
+        if (highTeam && lowTeam) {
             setSelectedMatchup({ highTeam, lowTeam, region });
             setSelectedTeam(null);
         }
@@ -146,7 +166,7 @@ function BracketVisualizer() {
                             key={region}
                             region={region}
                             data={bracketData[region]}
-                            onTeamClick={(team) => handleTeamClick(team, region)}
+                            onMatchupClick={(highTeam, lowTeam) => handleMatchupClick(highTeam, lowTeam, region)}
                             selectedMatchup={selectedMatchup?.region === region ? selectedMatchup : null}
                         />
                     )
@@ -194,7 +214,7 @@ function BracketVisualizer() {
     );
 }
 
-function RegionBracket({ region, data, onTeamClick, selectedMatchup }) {
+function RegionBracket({ region, data, onMatchupClick, selectedMatchup }) {
     if (!data || !data.teams) {
         return <div className="region-bracket empty">No data for {region}</div>;
     }
@@ -208,10 +228,11 @@ function RegionBracket({ region, data, onTeamClick, selectedMatchup }) {
 
     const getTeamBySeed = (seed) => data.teams.find(t => t.seed === seed);
     const hasPlayIn = (seed) => data.teams.filter(t => t.seed === seed).length > 1;
-    const isTeamSelected = (team) => {
-        if (!selectedMatchup || !team) return false;
-        return team.team_id === selectedMatchup.highTeam?.team_id || 
-               team.team_id === selectedMatchup.lowTeam?.team_id;
+    
+    const isMatchupSelected = (highTeam, lowTeam) => {
+        if (!selectedMatchup || !highTeam || !lowTeam) return false;
+        return (highTeam.team_id === selectedMatchup.highTeam?.team_id && 
+                lowTeam.team_id === selectedMatchup.lowTeam?.team_id);
     };
 
     return (
@@ -235,9 +256,8 @@ function RegionBracket({ region, data, onTeamClick, selectedMatchup }) {
                             highSeed={pairing.high}
                             lowSeed={pairing.low}
                             isPlayIn={isPlayIn}
-                            onTeamClick={onTeamClick}
-                            isHighSelected={isTeamSelected(highTeam)}
-                            isLowSelected={isTeamSelected(lowTeam)}
+                            onMatchupClick={onMatchupClick}
+                            isSelected={isMatchupSelected(highTeam, lowTeam)}
                         />
                     );
                 })}
@@ -246,16 +266,23 @@ function RegionBracket({ region, data, onTeamClick, selectedMatchup }) {
     );
 }
 
-function Matchup({ highTeam, lowTeam, highSeed, lowSeed, isPlayIn, onTeamClick, isHighSelected, isLowSelected }) {
+function Matchup({ highTeam, lowTeam, highSeed, lowSeed, isPlayIn, onMatchupClick, isSelected }) {
+    const handleClick = () => {
+        if (highTeam && lowTeam) {
+            onMatchupClick(highTeam, lowTeam);
+        }
+    };
+
     return (
-        <div className="matchup">
+        <div 
+            className={`matchup ${isSelected ? 'selected' : ''} ${highTeam && lowTeam ? 'clickable' : ''}`}
+            onClick={handleClick}
+        >
             <div className="matchup-inner">
                 <TeamRow 
                     team={highTeam} 
                     seed={highSeed} 
                     position="top" 
-                    onClick={() => highTeam && onTeamClick(highTeam)}
-                    isSelected={isHighSelected}
                 />
                 <div className="matchup-divider"></div>
                 <TeamRow 
@@ -263,15 +290,13 @@ function Matchup({ highTeam, lowTeam, highSeed, lowSeed, isPlayIn, onTeamClick, 
                     seed={lowSeed} 
                     position="bottom" 
                     isPlayIn={isPlayIn}
-                    onClick={() => lowTeam && onTeamClick(lowTeam)}
-                    isSelected={isLowSelected}
                 />
             </div>
         </div>
     );
 }
 
-function TeamRow({ team, seed, position, isPlayIn = false, onClick, isSelected = false }) {
+function TeamRow({ team, seed, position, isPlayIn = false }) {
     if (!team) {
         return (
             <div className={`team-row ${position} empty`}>
@@ -283,9 +308,8 @@ function TeamRow({ team, seed, position, isPlayIn = false, onClick, isSelected =
 
     return (
         <div 
-            className={`team-row ${position} ${isSelected ? 'selected' : ''}`}
+            className={`team-row ${position}`}
             style={{ '--team-color': team.primary_color || '#444' }}
-            onClick={onClick}
         >
             <span className="team-seed">{seed}</span>
             <div className="team-color-bar"></div>
@@ -434,16 +458,37 @@ function MatchupModal({ matchup, onClose, onTeamClick }) {
 function MatchupTeamCard({ team, data, onClick }) {
     const record = data?.ratings ? `${data.ratings.wins}-${data.ratings.losses}` : '';
     
+    // Use secondary color for background, with fallback
+    const primaryColor = team.primary_color || '#4A9EFF';
+    const secondaryColor = team.secondary_color || '#FFFFFF';
+    const secondaryIsLight = isColorLight(secondaryColor);
+    const headerBgColor = secondaryIsLight ? secondaryColor : '#FFFFFF';
+    const headerTextColor = primaryColor;
+    const headerSubTextColor = '#333333';
+    
     return (
-        <div className="modal-team clickable" style={{ '--team-color': team.primary_color }} onClick={onClick}>
-            {team.logo_url && <img src={team.logo_url} alt={team.name} />}
-            <div className="modal-team-info">
-                <span className="modal-seed">#{team.seed} Seed</span>
-                <div className="modal-name-row">
-                    <span className="modal-name">{team.name}</span>
-                    {record && <span className="modal-record">{record}</span>}
+        <div 
+            className="modal-team clickable" 
+            style={{ 
+                '--team-color': primaryColor,
+                '--team-bg': headerBgColor,
+                '--team-text': headerTextColor,
+                '--team-subtext': headerSubTextColor
+            }} 
+            onClick={onClick}
+        >
+            <div className="modal-team-header">
+                {team.logo_url && <img src={team.logo_url} alt={team.name} />}
+                <div className="modal-team-info">
+                    <span className="modal-seed">#{team.seed} Seed</span>
+                    <div className="modal-name-row">
+                        <span className="modal-name">{team.name}</span>
+                    </div>
+                    <div className="modal-team-meta">
+                        <span className="modal-conf">{team.conference}</span>
+                        {record && <span className="modal-record">{record}</span>}
+                    </div>
                 </div>
-                <span className="modal-conf">{team.conference}</span>
             </div>
             <span className="click-hint">Click for full stats</span>
         </div>
