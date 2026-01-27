@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom';
 import CompareView from './components/compare/CompareView';
 import BracketVisualizer from './components/bracket/BracketVisualizer';
+import MomentumTracker from './components/momentum/MomentumTracker';
 import './global.css';
 
 function App() {
@@ -28,6 +29,9 @@ function App() {
                         <NavLink to="/bracket" className={({isActive}) => isActive ? 'nav-link active' : 'nav-link'}>
                             Bracket
                         </NavLink>
+                        <NavLink to="/momentum" className={({isActive}) => isActive ? 'nav-link active' : 'nav-link'}>
+                            🔥 Momentum
+                        </NavLink>
                     </nav>
                 </header>
 
@@ -35,6 +39,7 @@ function App() {
                     <Routes>
                         <Route path="/" element={<CompareView />} />
                         <Route path="/bracket" element={<BracketVisualizer />} />
+                        <Route path="/momentum" element={<MomentumTracker />} />
                     </Routes>
                 </main>
 
