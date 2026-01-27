@@ -1,13 +1,17 @@
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 import requests
 import sqlite3
 import json
 from datetime import datetime
 import time
 
+# Load environment variables from .env file
+load_dotenv()
+
 # Configuration
-KENPOM_API_KEY = "62554390abbad4d4b369909fe9cf978a2c06f26a5f3c6cf100ae5ed9dece1760"  # Replace with your actual API key
+KENPOM_API_KEY = os.getenv('KENPOM_API_KEY')
 BASE_URL = "https://kenpom.com"
 # Get project root (parent of this file's directory)
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -305,8 +309,10 @@ def full_sync(season=CURRENT_SEASON):
 if __name__ == '__main__':
     import sys
     
-    if KENPOM_API_KEY == "YOUR_API_KEY_HERE":
-        print("⚠️  Please set your KenPom API key in the KENPOM_API_KEY variable")
+    if not KENPOM_API_KEY:
+        print("⚠️  Please set your KENPOM_API_KEY in the .env file")
+        print("   Create a .env file in the project root with:")
+        print("   KENPOM_API_KEY=your_api_key_here")
         sys.exit(1)
     
     if len(sys.argv) > 1:
