@@ -28,6 +28,139 @@ CURRENT_SEASON = 2026
 # ESPN API endpoints
 ESPN_SCOREBOARD_URL = "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard"
 
+# KenPom to ESPN name mappings for teams that don't match automatically
+# Values are lowercase for matching against normalized ESPN names
+KENPOM_TO_ESPN = {
+    # ACC
+    'Florida St.': 'florida state',
+    'N.C. State': 'nc state',
+    
+    # Big Ten
+    'Michigan St.': 'michigan state',
+    'Ohio St.': 'ohio state',
+    'Penn St.': 'penn state',
+    
+    # Big 12
+    'Iowa St.': 'iowa state',
+    'Kansas St.': 'kansas state',
+    'Oklahoma St.': 'oklahoma state',
+    
+    # Big East
+    'Connecticut': 'uconn',
+    
+    # SEC
+    'Mississippi': 'ole miss',
+    'Mississippi St.': 'mississippi state',
+    
+    # Mountain West
+    'Boise St.': 'boise state',
+    'Colorado St.': 'colorado state',
+    'Fresno St.': 'fresno state',
+    'San Diego St.': 'san diego state',
+    'San Jose St.': 'san jose state',
+    'Utah St.': 'utah state',
+    
+    # MAC
+    'Miami OH': 'miami (oh)',
+    'Ball St.': 'ball state',
+    'Kent St.': 'kent state',
+    
+    # Big Sky
+    'Idaho St.': 'idaho state',
+    'Montana St.': 'montana state',
+    'Portland St.': 'portland state',
+    'Sacramento St.': 'sacramento state',
+    'Weber St.': 'weber state',
+    
+    # Big West
+    'CSUN': 'cal state northridge',
+    'Cal St. Bakersfield': 'cal state bakersfield',
+    'Cal St. Fullerton': 'cal state fullerton',
+    'Long Beach St.': 'long beach state',
+    'Hawaii': "hawai'i",
+    
+    # Conference USA
+    'FIU': 'florida international',
+    'Jacksonville St.': 'jacksonville state',
+    'Kennesaw St.': 'kennesaw state',
+    'Missouri St.': 'missouri state',
+    'New Mexico St.': 'new mexico state',
+    'Sam Houston St.': 'sam houston',
+    'Sam Houston': 'sam houston',
+    
+    # Horizon
+    'Cleveland St.': 'cleveland state',
+    'IU Indy': 'iu indianapolis',
+    'Wright St.': 'wright state',
+    'Youngstown St.': 'youngstown state',
+    
+    # MEAC
+    'Coppin St.': 'coppin state',
+    'Delaware St.': 'delaware state',
+    'Morgan St.': 'morgan state',
+    'Norfolk St.': 'norfolk state',
+    
+    # MVC
+    'Illinois Chicago': 'uic',
+    'Illinois St.': 'illinois state',
+    'Indiana St.': 'indiana state',
+    'Murray St.': 'murray state',
+    'Wichita St.': 'wichita state',
+    
+    # NEC
+    'Chicago St.': 'chicago state',
+    'LIU': 'long island',
+    
+    # OVC
+    'Morehead St.': 'morehead state',
+    'SIUE': 'siu edwardsville',
+    'Tennessee Martin': 'ut martin',
+    'Tennessee St.': 'tennessee state',
+    
+    # Patriot League
+    'Loyola MD': 'loyola maryland',
+    
+    # Sun Belt
+    'Appalachian St.': 'appalachian state',
+    'Arkansas St.': 'arkansas state',
+    'Georgia St.': 'georgia state',
+    'Louisiana Monroe': 'ul monroe',
+    'Texas St.': 'texas state',
+    
+    # Southern
+    'East Tennessee St.': 'east tennessee state',
+    
+    # SWAC
+    'Alabama St.': 'alabama state',
+    'Alcorn St.': 'alcorn state',
+    'Arkansas Pine Bluff': 'arkansas-pine bluff',
+    'Bethune Cookman': 'bethune-cookman',
+    'Jackson St.': 'jackson state',
+    'Mississippi Valley St.': 'mississippi valley state',
+    
+    # Southland
+    'Northwestern St.': 'northwestern state',
+    'Southeastern Louisiana': 'southeastern louisiana',
+    'Texas A&M Corpus Chris': 'texas a&m-corpus christi',
+    
+    # Summit
+    'Nebraska Omaha': 'omaha',
+    'North Dakota St.': 'north dakota state',
+    'South Dakota St.': 'south dakota state',
+    
+    # WAC
+    'Cal Baptist': 'california baptist',
+    'Tarleton St.': 'tarleton state',
+    
+    # WCC
+    'Oregon St.': 'oregon state',
+    'Washington St.': 'washington state',
+    
+    # Other
+    'Gardner Webb': 'gardner-webb',
+    'USC Upstate': 'south carolina upstate',
+}
+
 def get_db():
     """Get database connection"""
     db = sqlite3.connect(DATABASE)
@@ -190,9 +323,12 @@ def update_scores_from_espn():
             home_name = game['home_name']
             away_name = game['away_name']
             
-            # Try to find matching ESPN game
-            home_normalized = normalize_team_name(home_name)
-            away_normalized = normalize_team_name(away_name)
+            # Convert KenPom names to ESPN format using mapping, then normalize
+            home_espn = KENPOM_TO_ESPN.get(home_name, home_name)
+            away_espn = KENPOM_TO_ESPN.get(away_name, away_name)
+            
+            home_normalized = normalize_team_name(home_espn)
+            away_normalized = normalize_team_name(away_espn)
             
             matched = None
             
