@@ -8,4 +8,4 @@
 cmds = ["npm run build"]
 
 [start]
-cmd = "gunicorn \"backend.app:create_app()\" --bind 0.0.0.0:$PORT --workers 2 --timeout 120"
+cmd = "python -m gunicorn \"backend.app:create_app()\" --bind 0.0.0.0:$PORT --workers 2 --timeout 120"
