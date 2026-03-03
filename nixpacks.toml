@@ -1,26 +1,11 @@
 # nixpacks.toml
-# Tells Railway's build system which languages/tools to install.
-#
-# WHY THIS IS NEEDED:
-#   Railway's Nixpacks builder auto-detects languages by looking for
-#   package.json (Node) or requirements.txt (Python) at the project root.
-#   Our package.json is inside frontend/, not the root, so Nixpacks only
-#   sees Python and doesn't install Node. This file overrides that
-#   auto-detection and explicitly requests both runtimes.
-
-[phases.setup]
-nixPkgs = ["nodejs_20"]
-
-[phases.install]
-cmds = [
-    "pip install -r requirements.txt",
-    "cd frontend && npm install"
-]
+# With package.json at the root, Nixpacks auto-detects both
+# Python (requirements.txt) and Node (package.json) and sets
+# both up correctly including pip and npm.
+# We only need to specify the build and start commands.
 
 [phases.build]
-cmds = [
-    "cd frontend && npm run build"
-]
+cmds = ["npm run build"]
 
 [start]
 cmd = "gunicorn \"backend.app:create_app()\" --bind 0.0.0.0:$PORT --workers 2 --timeout 120"
