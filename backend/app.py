@@ -10,12 +10,22 @@ from pathlib import Path
 # ============================================================
 # LAYER 2 ADDITION: Import validators
 # ============================================================
-from validators import (
-    validate_season, validate_team_id, validate_limit,
-    validate_kenpom_rank, validate_min_games, validate_trend,
-    validate_region, validate_search_query, validate_conference,
-    validate_boolean, validate_params
-)
+try:
+    # Production: Gunicorn loads app as backend.app module
+    from backend.validators import (
+        validate_season, validate_team_id, validate_limit,
+        validate_kenpom_rank, validate_min_games, validate_trend,
+        validate_region, validate_search_query, validate_conference,
+        validate_boolean, validate_params
+    )
+except ImportError:
+    # Local dev: running python backend/app.py directly
+    from validators import (
+        validate_season, validate_team_id, validate_limit,
+        validate_kenpom_rank, validate_min_games, validate_trend,
+        validate_region, validate_search_query, validate_conference,
+        validate_boolean, validate_params
+    )
 
 # ============================================================
 # LAYER 3 ADDITION: Rate limiting
