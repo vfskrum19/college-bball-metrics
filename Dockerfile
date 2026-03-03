@@ -55,11 +55,5 @@ COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 ENV PORT=8080
 ENV FLASK_ENV=production
 
-# Start Gunicorn using python -m to ensure it's found
-# regardless of PATH configuration
-CMD python -m gunicorn "backend.app:create_app()" \
-    --bind 0.0.0.0:$PORT \
-    --workers 2 \
-    --timeout 120 \
-    --access-logfile - \
-    --error-logfile -
+# Use shell form (not array form) so $PORT gets expanded at runtime
+CMD python -m gunicorn "backend.app:create_app()" --bind 0.0.0.0:$PORT --workers 2 --timeout 120 --access-logfile - --error-logfile -
