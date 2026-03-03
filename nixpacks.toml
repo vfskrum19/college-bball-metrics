@@ -9,7 +9,7 @@
 #   auto-detection and explicitly requests both runtimes.
 
 [phases.setup]
-nixPkgs = ["python312", "nodejs_20"]
+nixPkgs = ["nodejs_20"]
 
 [phases.install]
 cmds = [
