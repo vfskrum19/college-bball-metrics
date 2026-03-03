@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import './MomentumTracker.css';
 
-const API_BASE = 'http://localhost:5000';
-
+const API_BASE = '';
+ 
 // Trend icons
 const TREND_ICONS = {
   hot: '🔥',
