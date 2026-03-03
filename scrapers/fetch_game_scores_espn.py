@@ -31,6 +31,21 @@ ESPN_SCOREBOARD_URL = "https://site.api.espn.com/apis/site/v2/sports/basketball/
 # KenPom to ESPN name mappings for teams that don't match automatically
 # Values are lowercase for matching against normalized ESPN names
 KENPOM_TO_ESPN = {
+    # Around line 29, add these to the existing dictionary:
+    'Albany': 'ualbany',
+    'American': 'american university',
+    'Gardner-Webb': 'gardner-webb runnin',  # You already have this one, keep it
+    'Seattle': 'seattle u',
+    'Central Connecticut': 'central connecticut',  # or try 'central connecticut state'
+    'Southeast Missouri': 'southeast missouri state',
+    'Middle Tennessee': 'middle tennessee blue',
+    'Stony Brook': 'stony brook',  # Should already work, but verify
+    'UC Davis': 'uc davis',
+    'Seattle': 'seattle u',
+    'American': 'american university',
+    'Tarleton St.': 'tarleton state',  # You already have 'Tarleton' mapped
+    'UMass Lowell': 'umass lowell',
+
     # ACC
     'Florida St.': 'florida state',
     'N.C. State': 'nc state',
@@ -41,6 +56,7 @@ KENPOM_TO_ESPN = {
     'Penn St.': 'penn state',
     
     # Big 12
+    'Arizona St.': 'arizona state',
     'Iowa St.': 'iowa state',
     'Kansas St.': 'kansas state',
     'Oklahoma St.': 'oklahoma state',
@@ -51,6 +67,12 @@ KENPOM_TO_ESPN = {
     # SEC
     'Mississippi': 'ole miss',
     'Mississippi St.': 'mississippi state',
+    'South Carolina St.': 'south carolina state',
+    
+    # ACC / Pac-12 / other major
+    'Miami FL': 'miami',
+    'USC': 'usc',
+    'Central Connecticut': 'central connecticut',
     
     # Mountain West
     'Boise St.': 'boise state',
@@ -109,7 +131,10 @@ KENPOM_TO_ESPN = {
     
     # NEC
     'Chicago St.': 'chicago state',
-    'LIU': 'long island',
+    'LIU': 'long island university',
+    
+    # Ivy League
+    'Penn': 'pennsylvania',
     
     # OVC
     'Morehead St.': 'morehead state',
@@ -121,11 +146,13 @@ KENPOM_TO_ESPN = {
     'Loyola MD': 'loyola maryland',
     
     # Sun Belt
-    'Appalachian St.': 'appalachian state',
+    'Appalachian St.': 'app state',
     'Arkansas St.': 'arkansas state',
     'Georgia St.': 'georgia state',
     'Louisiana Monroe': 'ul monroe',
+    'Louisiana': 'louisiana',
     'Texas St.': 'texas state',
+    'Coastal Carolina': 'coastal carolina',
     
     # Southern
     'East Tennessee St.': 'east tennessee state',
@@ -136,21 +163,26 @@ KENPOM_TO_ESPN = {
     'Arkansas Pine Bluff': 'arkansas-pine bluff',
     'Bethune Cookman': 'bethune-cookman',
     'Jackson St.': 'jackson state',
+    'Grambling St.': 'grambling',
     'Mississippi Valley St.': 'mississippi valley state',
     
     # Southland
     'Northwestern St.': 'northwestern state',
-    'Southeastern Louisiana': 'southeastern louisiana',
+    'Southeastern Louisiana': 'se louisiana',
     'Texas A&M Corpus Chris': 'texas a&m-corpus christi',
+    'Nicholls St.': 'nicholls',
     
     # Summit
     'Nebraska Omaha': 'omaha',
     'North Dakota St.': 'north dakota state',
     'South Dakota St.': 'south dakota state',
+    'St. Thomas': 'st. thomas-minnesota',
     
     # WAC
     'Cal Baptist': 'california baptist',
     'Tarleton St.': 'tarleton state',
+    'Tarleton': 'tarleton state',
+    'UT Rio Grande Valley': 'ut rio grande valley',
     
     # WCC
     'Oregon St.': 'oregon state',
@@ -159,6 +191,7 @@ KENPOM_TO_ESPN = {
     # Other
     'Gardner Webb': 'gardner-webb',
     'USC Upstate': 'south carolina upstate',
+    'Queens': 'queens university',
 }
 
 def get_db():
@@ -238,29 +271,70 @@ def fetch_espn_scores_for_date(date_str):
         return {}
 
 def normalize_team_name(name):
-    """Normalize team name for matching"""
-    # Common normalizations
+    """Basic normalization: lowercase, strip, handle special chars"""
     name = name.lower().strip()
+    name = name.replace('\u00e9', 'e').replace('\u00f1', 'n').replace('\u2019', "'")
+    return name
+
+
+def strip_mascot(name):
+    """
+    Strip mascot from an ESPN display name.
+    ESPN format is always: "School Name Mascot(s)"
+    Strategy: try known multi-word mascots first, then strip last word.
+    """
+    # Multi-word mascots (last word alone would leave a partial name)
+    multi_word_mascots = [
+        " ragin' cajuns", ' blue devils', ' tar heels', ' crimson tide',
+        ' yellow jackets', ' demon deacons', ' fighting irish', ' golden gophers',
+        ' red raiders', ' horned frogs', ' sun devils', ' wolf pack',
+        ' running rebels', ' rainbow warriors', ' mean green', ' red wolves',
+        ' golden lions', ' black knights', ' fighting camels', ' golden griffins',
+        ' blue hens', ' fighting illini', ' golden flashes', ' mountain hawks',
+        ' black bears', ' red foxes', ' golden eagles', ' great danes',
+        ' river hawks', ' purple eagles', ' fighting hawks', ' blue hose',
+        ' big red', ' big green', ' golden hurricane', ' red storm',
+        ' golden grizzlies', ' green wave', ' thundering herd', ' blue demons',
+        ' nittany lions', ' delta devils', ' golden suns', ' red flash',
+        ' scarlet knights', ' golden bears', ' screaming eagles',
+        ' purple aces', " runnin' bulldogs",
+    ]
     
-    # Remove common suffixes
-    for suffix in [' wildcats', ' bulldogs', ' tigers', ' bears', ' eagles', 
-                   ' hawks', ' panthers', ' cardinals', ' blue devils', ' tar heels',
-                   ' crimson tide', ' volunteers', ' gators', ' seminoles', ' cavaliers',
-                   ' hokies', ' yellow jackets', ' demon deacons', ' wolfpack', ' hurricanes',
-                   ' fighting irish', ' spartans', ' buckeyes', ' wolverines', ' badgers',
-                   ' hawkeyes', ' boilermakers', ' hoosiers', ' golden gophers', ' huskers',
-                   ' jayhawks', ' cyclones', ' sooners', ' cowboys', ' longhorns',
-                   ' mountaineers', ' red raiders', ' horned frogs', ' razorbacks',
-                   ' aggies', ' rebels', ' commodores', ' gamecocks', ' bruins',
-                   ' ducks', ' beavers', ' huskies', ' cougars', ' utes', ' buffaloes',
-                   ' sun devils', ' trojans', ' cardinal', ' zags', ' gaels', ' broncos',
-                   ' aztecs', ' wolf pack', ' running rebels', ' rainbow warriors',
-                   ' owls', ' mustangs', ' mean green', ' roadrunners', ' miners',
-                   ' racers', ' colonels', ' govs', ' skyhawks', ' redhawks', ' penguins']:
-        if name.endswith(suffix):
-            name = name[:-len(suffix)]
+    for mascot in multi_word_mascots:
+        if name.endswith(mascot):
+            return name[:-len(mascot)].strip()
     
-    return name.strip()
+    # Single-word mascots: just strip the last word
+    # This handles ALL single-word mascots (bulldogs, zips, monarchs, billikens, etc.)
+    parts = name.rsplit(' ', 1)
+    if len(parts) == 2 and len(parts[0]) >= 2:
+        return parts[0].strip()
+    
+    return name
+
+
+def names_match(kenpom_name, espn_raw_name):
+    """
+    Check if a KenPom name matches an ESPN raw lowercased display name.
+    VERY STRICT matching - NO fuzzy logic to prevent catastrophic mismatches.
+    """
+    kp = normalize_team_name(kenpom_name)
+    espn = normalize_team_name(espn_raw_name)
+    
+    # Strategy 1: Exact match
+    if kp == espn:
+        return True
+    
+    # Strategy 2: Match after stripping mascot from ESPN name  
+    espn_stripped = strip_mascot(espn)
+    if kp == espn_stripped:
+        return True
+    
+    # Strategy 3: REMOVED - fuzzy matching causes too many false positives
+    # If a team doesn't match above, it should fail rather than match wrong team
+    
+    return False
+
 
 def update_scores_from_espn():
     """
@@ -323,30 +397,20 @@ def update_scores_from_espn():
             home_name = game['home_name']
             away_name = game['away_name']
             
-            # Convert KenPom names to ESPN format using mapping, then normalize
-            home_espn = KENPOM_TO_ESPN.get(home_name, home_name)
-            away_espn = KENPOM_TO_ESPN.get(away_name, away_name)
-            
-            home_normalized = normalize_team_name(home_espn)
-            away_normalized = normalize_team_name(away_espn)
+            # Convert KenPom names to ESPN format using mapping
+            home_mapped = KENPOM_TO_ESPN.get(home_name, home_name)
+            away_mapped = KENPOM_TO_ESPN.get(away_name, away_name)
             
             matched = None
             
-            # Try different matching strategies
             for (espn_home, espn_away), scores in espn_games.items():
-                espn_home_norm = normalize_team_name(espn_home)
-                espn_away_norm = normalize_team_name(espn_away)
-                
-                # Direct match
-                if (home_normalized in espn_home_norm or espn_home_norm in home_normalized) and \
-                   (away_normalized in espn_away_norm or espn_away_norm in away_normalized):
+                # Try normal order
+                if names_match(home_mapped, espn_home) and names_match(away_mapped, espn_away):
                     matched = scores
                     break
                 
-                # Swapped (ESPN might have home/away different)
-                if (home_normalized in espn_away_norm or espn_away_norm in home_normalized) and \
-                   (away_normalized in espn_home_norm or espn_home_norm in away_normalized):
-                    # Swap scores
+                # Try swapped home/away
+                if names_match(home_mapped, espn_away) and names_match(away_mapped, espn_home):
                     matched = {
                         'home_score': scores['away_score'],
                         'away_score': scores['home_score']
@@ -363,10 +427,33 @@ def update_scores_from_espn():
         
         db.commit()
         
-        if games_updated > 0:
+        if games_updated > 0 and games_updated == len(our_games):
             print(f"✓ {games_updated} games updated")
+        elif games_updated > 0:
+            print(f"✓ {games_updated}/{len(our_games)} games updated")
+            # Show what failed
+            for game in our_games:
+                h_mapped = KENPOM_TO_ESPN.get(game['home_name'], game['home_name'])
+                a_mapped = KENPOM_TO_ESPN.get(game['away_name'], game['away_name'])
+                # Check if this one matched by seeing if it still has NULL score
+                check = cursor.execute('SELECT home_score FROM games WHERE id = ?', (game['id'],)).fetchone()
+                if check['home_score'] is None:
+                    print(f"    MISS: '{game['home_name']}'->'{normalize_team_name(h_mapped)}' vs '{game['away_name']}'->'{normalize_team_name(a_mapped)}'")
         else:
             print(f"0 matched (had {len(our_games)} games, ESPN had {len(espn_games)})")
+            # Show what failed to match for debugging
+            for game in our_games[:3]:
+                h_mapped = KENPOM_TO_ESPN.get(game['home_name'], game['home_name'])
+                a_mapped = KENPOM_TO_ESPN.get(game['away_name'], game['away_name'])
+                h_norm = normalize_team_name(h_mapped)
+                a_norm = normalize_team_name(a_mapped)
+                print(f"    MISS: '{game['home_name']}'->'{h_norm}' vs '{game['away_name']}'->'{a_norm}'")
+                # Show closest ESPN matches
+                for (eh, ea), s in espn_games.items():
+                    ehn = strip_mascot(normalize_team_name(eh))
+                    ean = strip_mascot(normalize_team_name(ea))
+                    if h_norm in ehn or ehn in h_norm or a_norm in ean or ean in a_norm:
+                        print(f"      ESPN has: '{eh}'->'{ehn}' vs '{ea}'->'{ean}'")
         
         total_updated += games_updated
         

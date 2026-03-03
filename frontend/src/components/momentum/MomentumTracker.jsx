@@ -13,11 +13,11 @@ const TREND_ICONS = {
 };
 
 const TREND_COLORS = {
-  hot: '#ff4444',
-  rising: '#44aa44',
+  hot: '#ff6b6b',
+  rising: '#4ade80',
   stable: '#888888',
-  falling: '#cc8800',
-  cold: '#4488ff'
+  falling: '#fbbf24',
+  cold: '#60a5fa'
 };
 
 function MomentumTracker() {
@@ -28,6 +28,7 @@ function MomentumTracker() {
   const [conferences, setConferences] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [selectedTeam, setSelectedTeam] = useState(null);
   
   // Filters
   const [filters, setFilters] = useState({
@@ -88,6 +89,14 @@ function MomentumTracker() {
 
   const handleFilterChange = (key, value) => {
     setFilters(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleTeamClick = (team) => {
+    setSelectedTeam(team);
+  };
+
+  const closeTeamCard = () => {
+    setSelectedTeam(null);
   };
 
   return (
@@ -188,22 +197,66 @@ function MomentumTracker() {
         {error && <div className="error">Error: {error}</div>}
         
         {!loading && !error && activeTab === 'rankings' && (
-          <RankingsTable rankings={rankings} />
+          <RankingsTable rankings={rankings} onTeamClick={handleTeamClick} />
         )}
         
         {!loading && !error && activeTab === 'upsets' && (
-          <UpsetCandidatesTable candidates={upsetCandidates} />
+          <UpsetCandidatesTable candidates={upsetCandidates} onTeamClick={handleTeamClick} />
         )}
         
         {!loading && !error && activeTab === 'vulnerable' && (
-          <VulnerableFavoritesTable teams={vulnerableFavorites} />
+          <VulnerableFavoritesTable teams={vulnerableFavorites} onTeamClick={handleTeamClick} />
         )}
       </div>
+
+      {/* Team Card Modal */}
+      {selectedTeam && (
+        <TeamCardModal team={selectedTeam} onClose={closeTeamCard} />
+      )}
     </div>
   );
 }
 
-function RankingsTable({ rankings }) {
+// Simple TeamLogo component - just uses logo_url from API
+function TeamLogo({ logoUrl, teamName, size = 32 }) {
+  const [imgError, setImgError] = useState(false);
+  
+  if (imgError || !logoUrl) {
+    // Fallback to first letter
+    return (
+      <div 
+        className="team-logo-fallback"
+        style={{ 
+          width: size, 
+          height: size, 
+          minWidth: size,
+          borderRadius: '50%',
+          background: '#3a3a4a',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: size * 0.45,
+          fontWeight: 'bold',
+          color: '#a0a0a0'
+        }}
+      >
+        {teamName?.charAt(0) || '?'}
+      </div>
+    );
+  }
+  
+  return (
+    <img 
+      src={logoUrl}
+      alt={`${teamName} logo`}
+      className="team-logo"
+      style={{ width: size, height: size, minWidth: size, objectFit: 'contain' }}
+      onError={() => setImgError(true)}
+    />
+  );
+}
+
+function RankingsTable({ rankings, onTeamClick }) {
   if (!rankings.length) {
     return <div className="no-data">No teams match the current filters</div>;
   }
@@ -226,12 +279,17 @@ function RankingsTable({ rankings }) {
         </thead>
         <tbody>
           {rankings.map((team, idx) => (
-            <tr key={team.team_id}>
+            <tr key={team.team_id} onClick={() => onTeamClick(team)} className="clickable-row">
               <td className="rank">{idx + 1}</td>
               <td className="team-name">
-                <span className="name">{team.name}</span>
-                <span className="conference">{team.conference}</span>
-                {team.seed && <span className="seed">({team.seed})</span>}
+                <div className="team-name-inner">
+                  <TeamLogo logoUrl={team.logo_url} teamName={team.name} size={28} />
+                  <div className="team-name-text">
+                    <span className="name">{team.name}</span>
+                    <span className="conference">{team.conference}</span>
+                  </div>
+                  {team.seed && <span className="seed">({team.seed})</span>}
+                </div>
               </td>
               <td className="kenpom">#{team.kenpom_rank}</td>
               <td className="record">{team.wins}-{team.losses}</td>
@@ -258,7 +316,7 @@ function RankingsTable({ rankings }) {
   );
 }
 
-function UpsetCandidatesTable({ candidates }) {
+function UpsetCandidatesTable({ candidates, onTeamClick }) {
   if (!candidates.length) {
     return <div className="no-data">No upset candidates found</div>;
   }
@@ -288,15 +346,25 @@ function UpsetCandidatesTable({ candidates }) {
           </thead>
           <tbody>
             {candidates.map((team, idx) => (
-              <tr key={team.team_id}>
+              <tr key={team.team_id} onClick={() => onTeamClick(team)} className="clickable-row">
                 <td className="rank">{idx + 1}</td>
                 <td className="team-name">
-                  <span className="name">{team.name}</span>
-                  <span className="region">{team.region}</span>
+                  <div className="team-name-inner">
+                    <TeamLogo logoUrl={team.logo_url} teamName={team.name} size={28} />
+                    <div className="team-name-text">
+                      <span className="name">{team.name}</span>
+                      <span className="region">{team.region}</span>
+                    </div>
+                  </div>
                 </td>
                 <td className="matchup">({team.seed}) vs ({team.opponent.seed})</td>
                 <td className="vs-arrow">→</td>
-                <td className="opponent-name">{team.opponent.name}</td>
+                <td className="opponent-cell">
+                  <div className="opponent-inner">
+                    <TeamLogo logoUrl={team.opponent.logo_url} teamName={team.opponent.name} size={24} />
+                    <span className="opponent-name">{team.opponent.name}</span>
+                  </div>
+                </td>
                 <td className="momentum-comparison">
                   <span className="team-mom">{team.momentum_score.toFixed(0)}</span>
                   <span className="vs">vs</span>
@@ -330,7 +398,7 @@ function UpsetCandidatesTable({ candidates }) {
   );
 }
 
-function VulnerableFavoritesTable({ teams }) {
+function VulnerableFavoritesTable({ teams, onTeamClick }) {
   if (!teams.length) {
     return <div className="no-data">No vulnerable favorites found</div>;
   }
@@ -360,14 +428,19 @@ function VulnerableFavoritesTable({ teams }) {
           </thead>
           <tbody>
             {teams.map((team, idx) => (
-              <tr key={team.team_id} className="vulnerable-row">
+              <tr key={team.team_id} className="vulnerable-row clickable-row" onClick={() => onTeamClick(team)}>
                 <td className="rank">{idx + 1}</td>
                 <td className="team-name">
-                  <span className="name">{team.name}</span>
-                  <span className="conference">{team.conference}</span>
+                  <div className="team-name-inner">
+                    <TeamLogo logoUrl={team.logo_url} teamName={team.name} size={28} />
+                    <div className="team-name-text">
+                      <span className="name">{team.name}</span>
+                      <span className="conference">{team.conference}</span>
+                    </div>
+                  </div>
                 </td>
-                <td className="seed">({team.seed})</td>
-                <td className="region">{team.region}</td>
+                <td className="seed-cell">({team.seed})</td>
+                <td className="region-cell">{team.region}</td>
                 <td className="record">{team.wins}-{team.losses}</td>
                 <td className="streak">
                   {team.win_streak > 0 && <span className="win-streak">W{team.win_streak}</span>}
@@ -392,6 +465,163 @@ function VulnerableFavoritesTable({ teams }) {
       
       <div className="insight-box">
         💡 These favored teams are slumping heading into March - consider picking against them in early rounds
+      </div>
+    </div>
+  );
+}
+
+function TeamCardModal({ team, onClose }) {
+  const [teamDetails, setTeamDetails] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Fetch additional team details
+    fetch(`${API_BASE}/api/team/${team.team_id}/ratings`)
+      .then(res => res.json())
+      .then(data => {
+        setTeamDetails(data);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error('Error fetching team details:', err);
+        setLoading(false);
+      });
+  }, [team.team_id]);
+
+  // Close on escape key
+  useEffect(() => {
+    const handleEsc = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [onClose]);
+
+  // Close on backdrop click
+  const handleBackdropClick = (e) => {
+    if (e.target.classList.contains('modal-backdrop')) {
+      onClose();
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={handleBackdropClick}>
+      <div className="team-card-modal">
+        <button className="modal-close" onClick={onClose}>×</button>
+        
+        <div className="team-card-header">
+          <TeamLogo logoUrl={team.logo_url} teamName={team.name} size={64} />
+          <div className="team-card-title">
+            <h2>{team.name}</h2>
+            <p className="team-card-subtitle">
+              {team.conference} {team.seed && `• #${team.seed} Seed`} {team.region && `• ${team.region}`}
+            </p>
+          </div>
+        </div>
+
+        <div className="team-card-body">
+          {/* Momentum Summary */}
+          <div className="team-card-section">
+            <h3>Momentum</h3>
+            <div className="team-card-stats">
+              <div className="stat-box">
+                <span className="stat-value" style={{ color: TREND_COLORS[team.trend] }}>
+                  {team.momentum_score?.toFixed(1) || 'N/A'}
+                </span>
+                <span className="stat-label">Score</span>
+              </div>
+              <div className="stat-box">
+                <span className="stat-value">{TREND_ICONS[team.trend]}</span>
+                <span className="stat-label">Trend</span>
+              </div>
+              <div className="stat-box">
+                <span className={`stat-value ${team.avg_vs_expected >= 0 ? 'positive' : 'negative'}`}>
+                  {team.avg_vs_expected !== null ? (team.avg_vs_expected >= 0 ? '+' : '') + team.avg_vs_expected?.toFixed(1) : 'N/A'}
+                </span>
+                <span className="stat-label">vs Expected</span>
+              </div>
+              <div className="stat-box">
+                <span className={`stat-value ${team.rank_change > 0 ? 'positive' : team.rank_change < 0 ? 'negative' : ''}`}>
+                  {team.rank_change > 0 ? '+' : ''}{team.rank_change || 0}
+                </span>
+                <span className="stat-label">Rank Δ</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Record & Streaks */}
+          <div className="team-card-section">
+            <h3>Season</h3>
+            <div className="team-card-stats">
+              <div className="stat-box">
+                <span className="stat-value">{team.wins}-{team.losses}</span>
+                <span className="stat-label">L10 Record</span>
+              </div>
+              <div className="stat-box">
+                <span className="stat-value">#{team.kenpom_rank}</span>
+                <span className="stat-label">KenPom</span>
+              </div>
+              <div className="stat-box">
+                {team.win_streak > 0 && (
+                  <>
+                    <span className="stat-value win-streak">W{team.win_streak}</span>
+                    <span className="stat-label">Streak</span>
+                  </>
+                )}
+                {team.loss_streak > 0 && (
+                  <>
+                    <span className="stat-value loss-streak">L{team.loss_streak}</span>
+                    <span className="stat-label">Streak</span>
+                  </>
+                )}
+                {!team.win_streak && !team.loss_streak && (
+                  <>
+                    <span className="stat-value">-</span>
+                    <span className="stat-label">Streak</span>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* KenPom Ratings if available */}
+          {teamDetails && teamDetails.ratings && (
+            <div className="team-card-section">
+              <h3>KenPom Ratings</h3>
+              <div className="team-card-stats">
+                <div className="stat-box">
+                  <span className="stat-value">{teamDetails.ratings.adj_em?.toFixed(1)}</span>
+                  <span className="stat-label">AdjEM</span>
+                </div>
+                <div className="stat-box">
+                  <span className="stat-value">{teamDetails.ratings.adj_oe?.toFixed(1)}</span>
+                  <span className="stat-label">AdjO</span>
+                </div>
+                <div className="stat-box">
+                  <span className="stat-value">{teamDetails.ratings.adj_de?.toFixed(1)}</span>
+                  <span className="stat-label">AdjD</span>
+                </div>
+                <div className="stat-box">
+                  <span className="stat-value">{teamDetails.ratings.adj_tempo?.toFixed(1)}</span>
+                  <span className="stat-label">Tempo</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Tournament info if seeded */}
+          {team.seed && team.region && (
+            <div className="team-card-section">
+              <h3>Tournament</h3>
+              <div className="team-card-tournament">
+                <span className="seed-badge">#{team.seed} Seed</span>
+                <span className="region-badge">{team.region} Region</span>
+              </div>
+            </div>
+          )}
+
+          {loading && <div className="loading-small">Loading additional stats...</div>}
+        </div>
       </div>
     </div>
   );

@@ -42,7 +42,7 @@ def make_request(endpoint, params):
         return None
 
 def fetch_teams(season=CURRENT_SEASON):
-    """Fetch all teams for a season"""
+    """Fetch all teams for a season (preserves branding data)"""
     print(f"Fetching teams for {season}...")
     data = make_request('teams', {'y': season})
     
@@ -53,28 +53,50 @@ def fetch_teams(season=CURRENT_SEASON):
     db = get_db()
     cursor = db.cursor()
     
+    # Save existing branding data before refresh
+    existing_branding = {}
+    try:
+        rows = cursor.execute(
+            'SELECT team_id, logo_url, primary_color, secondary_color FROM teams WHERE season = ?',
+            (season,)
+        ).fetchall()
+        for row in rows:
+            existing_branding[row['team_id']] = {
+                'logo_url': row['logo_url'],
+                'primary_color': row['primary_color'],
+                'secondary_color': row['secondary_color']
+            }
+    except Exception:
+        pass  # Columns might not exist yet
+    
     # Clear existing teams for this season
     cursor.execute('DELETE FROM teams WHERE season = ?', (season,))
     
-    # Insert teams
+    # Insert teams, restoring branding if it existed
     for team in data:
+        team_id = team.get('TeamID')
+        branding = existing_branding.get(team_id, {})
         cursor.execute('''
-            INSERT INTO teams (team_id, name, conference, coach, arena, arena_city, arena_state, season)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO teams (team_id, name, conference, coach, arena, arena_city, arena_state, season,
+                               logo_url, primary_color, secondary_color)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
-            team.get('TeamID'),
+            team_id,
             team.get('TeamName'),
             team.get('ConfShort'),
             team.get('Coach'),
             team.get('Arena'),
             team.get('ArenaCity'),
             team.get('ArenaState'),
-            season
+            season,
+            branding.get('logo_url'),
+            branding.get('primary_color'),
+            branding.get('secondary_color')
         ))
     
     db.commit()
     db.close()
-    print(f"✓ Inserted {len(data)} teams")
+    print(f"✓ Inserted {len(data)} teams ({len(existing_branding)} with preserved branding)")
 
 def fetch_ratings(season=CURRENT_SEASON):
     """Fetch current ratings for all teams"""

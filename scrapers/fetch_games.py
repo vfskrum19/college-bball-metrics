@@ -145,11 +145,12 @@ def fetch_games_range(days_back=30, season=CURRENT_SEASON):
         print("❌ KENPOM_API_KEY not set in .env file")
         return
     
-    end_date = datetime.now()
+    end_date = datetime.now() - timedelta(days=1)  # Yesterday (today's games incomplete)
     start_date = end_date - timedelta(days=days_back)
     
-    print(f"Date range: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
-    print(f"Fetching {days_back} days of game data...\n")
+    print(f"Date range: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')} (yesterday)")
+    print(f"Fetching {days_back} days of game data...")
+    print(f"Note: Using yesterday as end date - today's games may be incomplete\n")
     
     total_inserted = 0
     total_skipped = 0

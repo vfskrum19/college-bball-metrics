@@ -129,6 +129,10 @@ def fetch_ratings_range(days_back=30, interval=3, season=CURRENT_SEASON):
     Args:
         days_back: How many days to go back
         interval: Fetch every N days (default 3 for efficiency)
+    
+    Note: We use YESTERDAY as the end date since today's data is incomplete
+    (games still being played). Each snapshot is offset by 1 day to ensure
+    we have complete data for that period.
     """
     print(f"\n{'='*60}")
     print(f"Fetching KenPom Rating Snapshots")
@@ -138,10 +142,11 @@ def fetch_ratings_range(days_back=30, interval=3, season=CURRENT_SEASON):
         print("❌ KENPOM_API_KEY not set in .env file")
         return
     
-    end_date = datetime.now()
+    # Use YESTERDAY as end date (today's data is incomplete)
+    end_date = datetime.now() - timedelta(days=1)
     start_date = end_date - timedelta(days=days_back)
     
-    # Calculate dates to fetch
+    # Calculate dates to fetch (every N days, offset by 1 to get complete data)
     dates_to_fetch = []
     current_date = start_date
     
@@ -149,19 +154,20 @@ def fetch_ratings_range(days_back=30, interval=3, season=CURRENT_SEASON):
         dates_to_fetch.append(current_date.strftime('%Y-%m-%d'))
         current_date += timedelta(days=interval)
     
-    # Always include today and the start date
-    today_str = end_date.strftime('%Y-%m-%d')
+    # Always include yesterday (most recent complete data) and the start date
+    yesterday_str = end_date.strftime('%Y-%m-%d')
     start_str = start_date.strftime('%Y-%m-%d')
     
-    if today_str not in dates_to_fetch:
-        dates_to_fetch.append(today_str)
+    if yesterday_str not in dates_to_fetch:
+        dates_to_fetch.append(yesterday_str)
     if start_str not in dates_to_fetch:
         dates_to_fetch.insert(0, start_str)
     
     dates_to_fetch = sorted(set(dates_to_fetch))
     
-    print(f"Date range: {start_str} to {today_str}")
+    print(f"Date range: {start_str} to {yesterday_str} (yesterday)")
     print(f"Fetching {len(dates_to_fetch)} snapshots (every {interval} days)...\n")
+    print(f"Note: Using yesterday as end date - today's data is incomplete\n")
     
     total_inserted = 0
     total_skipped = 0
@@ -193,11 +199,12 @@ def fetch_ratings_range(days_back=30, interval=3, season=CURRENT_SEASON):
     
     return total_inserted
 
-def fetch_today_snapshot(season=CURRENT_SEASON):
-    """Quick function to fetch just today's snapshot"""
-    today = datetime.now().strftime('%Y-%m-%d')
-    print(f"Fetching today's snapshot ({today})...")
-    inserted, skipped = fetch_snapshot_for_date(today, season)
+def fetch_yesterday_snapshot(season=CURRENT_SEASON):
+    """Quick function to fetch yesterday's snapshot (most recent complete data)"""
+    yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+    print(f"Fetching yesterday's snapshot ({yesterday})...")
+    print(f"Note: Using yesterday since today's games may still be in progress\n")
+    inserted, skipped = fetch_snapshot_for_date(yesterday, season)
     
     if skipped > 0:
         print(f"✓ Already have today's snapshot")
@@ -285,7 +292,7 @@ if __name__ == '__main__':
     if args.stats:
         show_stats()
     elif args.today:
-        fetch_today_snapshot()
+        fetch_yesterday_snapshot()
     elif args.date:
         print(f"Fetching snapshot for {args.date}...")
         inserted, skipped = fetch_snapshot_for_date(args.date)
