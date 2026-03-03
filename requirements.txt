@@ -5,6 +5,12 @@
 flask>=3.0.0
 flask-cors>=4.0.0
 
+# Production server
+# Gunicorn is what Railway (and most production hosts) use to run Flask.
+# Flask's built-in server is single-threaded and not safe for production.
+# Gunicorn handles multiple concurrent requests and restarts crashed workers.
+gunicorn>=21.2.0
+
 # HTTP Requests
 requests>=2.31.0
 
@@ -12,10 +18,17 @@ requests>=2.31.0
 beautifulsoup4>=4.12.0
 lxml>=5.0.0
 
-# KenPom Data (player stats)
-kenpompy>=0.9.0
-
-# Data Processing (used by kenpompy)
+# Data Processing
+# Used by scrapers for data manipulation. Not used by the Flask app itself.
 pandas>=2.0.0
 
-# Using Kenpompy related installs for now, will likely move away from that in the near future
+# Rate limiting
+# Protects against bots and abuse. Must be installed for limits to be active.
+Flask-Limiter>=3.5.0
+
+# PostgreSQL driver
+# psycopg2-binary is the "batteries included" version - no C compiler needed.
+# This is what connects Python/Flask to the PostgreSQL database on Railway.
+# The -binary suffix means it bundles its own compiled C extensions,
+# which is what you want for deployment (vs building from source).
+psycopg2-binary>=2.9.9

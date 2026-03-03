@@ -7,7 +7,10 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      // Proxy all /api requests to Flask backend
+      // Proxy all /api requests to Flask backend during local development.
+      // This is ONLY active when running `npm run dev` - it has no effect
+      // on the production build. In production, Flask serves both the
+      // built React files AND the API from the same server, so no proxy needed.
       '/api': {
         target: 'http://localhost:5000',
         changeOrigin: true,
@@ -15,7 +18,10 @@ export default defineConfig({
     }
   },
   build: {
-    // Output to dist folder for Flask to serve in production
+    // Output built files to frontend/dist
+    // Flask is configured to serve static files from this folder.
+    // Railway runs `npm run build` before starting the Flask server,
+    // so this folder will exist by the time Flask starts.
     outDir: 'dist',
   }
 })

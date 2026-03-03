@@ -1,0 +1,15 @@
+[build]
+builder = "NIXPACKS"
+# Build command runs BEFORE the app starts.
+# Step 1: Install Node dependencies and build React app into frontend/dist
+# Step 2: Install Python dependencies
+# Railway runs these in order, so by the time Flask starts,
+# the built frontend files are already in place.
+buildCommand = "cd frontend && npm install && npm run build"
+
+[deploy]
+startCommand = "gunicorn \"backend.app:create_app()\" --bind 0.0.0.0:$PORT --workers 2 --timeout 120"
+healthcheckPath = "/api/status"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
