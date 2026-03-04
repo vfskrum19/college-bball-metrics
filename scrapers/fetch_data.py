@@ -224,7 +224,7 @@ def fetch_archive_snapshot(date_str, season=CURRENT_SEASON):
         ''', (
             team_result['team_id'], season,
             rating.get('ArchiveDate'),
-            rating.get('Preseason') == 'true',
+            1 if rating.get('Preseason') == 'true' else 0,
             rating.get('AdjEM'), rating.get('RankAdjEM'),
             rating.get('AdjOE'), rating.get('RankAdjOE'),
             rating.get('AdjDE'), rating.get('RankAdjDE'),
@@ -268,7 +268,7 @@ def full_sync(season=CURRENT_SEASON):
                 ['team_id', 'season', 'archive_date', 'is_preseason',
                  'adj_em', 'rank_adj_em', 'adj_oe', 'rank_adj_oe',
                  'adj_de', 'rank_adj_de', 'adj_tempo', 'rank_adj_tempo'],
-                (team_result['team_id'], season, 'preseason', True,
+                (team_result['team_id'], season, 'preseason', 1,
                  rating.get('AdjEM'), rating.get('RankAdjEM'),
                  rating.get('AdjOE'), rating.get('RankAdjOE'),
                  rating.get('AdjDE'), rating.get('RankAdjDE'),
