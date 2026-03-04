@@ -46,6 +46,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy backend code (validators.py lives inside backend/)
 COPY backend/ ./backend/
+COPY scrapers/ ./scrapers/
+COPY utils/ ./utils/
+COPY cron.py ./
 
 # Copy built React app from Stage 1
 # Flask serves these static files directly
