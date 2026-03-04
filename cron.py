@@ -168,7 +168,7 @@ def run_pipeline(dry_run=False):
     elif optional_failures:
         print(f"\n⚠ Optional step(s) failed: {', '.join(optional_failures)}")
     else:
-        print(f"\n✅ All steps completed successfully")
+        print(f"\n✅ All steps completed successfully :)")
 
 
 if __name__ == "__main__":
