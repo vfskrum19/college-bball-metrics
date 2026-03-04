@@ -272,7 +272,8 @@ def full_sync(season=CURRENT_SEASON):
                  rating.get('AdjEM'), rating.get('RankAdjEM'),
                  rating.get('AdjOE'), rating.get('RankAdjOE'),
                  rating.get('AdjDE'), rating.get('RankAdjDE'),
-                 rating.get('AdjTempo'), rating.get('RankAdjTempo'))
+                 rating.get('AdjTempo'), rating.get('RankAdjTempo')),
+                conflict_columns=['team_id', 'season', 'archive_date']
             )
         commit(db)
         close_db(db)

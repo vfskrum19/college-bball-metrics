@@ -164,35 +164,54 @@ def commit(conn):
     conn.commit()
 
 
-def insert_or_replace(conn, table, columns, values):
+def insert_or_replace(conn, table, columns, values, conflict_columns=None):
     """
     Handle INSERT OR REPLACE (SQLite) vs INSERT ... ON CONFLICT DO UPDATE (PostgreSQL).
-    
+
     WHY THIS IS NEEDED:
         SQLite has INSERT OR REPLACE which is a convenient shorthand.
-        PostgreSQL requires the more explicit ON CONFLICT syntax.
-        This helper abstracts the difference.
-    
+        PostgreSQL requires the more explicit ON CONFLICT syntax and needs
+        to know WHICH columns form the unique constraint to conflict on.
+        Some tables conflict on a single primary key (default), others on
+        a composite unique constraint across multiple columns — for example
+        ratings_archive is unique on (team_id, season, archive_date).
+
     Args:
-        conn: database connection
-        table: table name
-        columns: list of column names
-        values: tuple of values matching columns order
-        conflict_column: column that triggers conflict (default: first column)
+        conn:             database connection
+        table:            table name
+        columns:          list of column names to insert
+        values:           tuple of values matching columns order
+        conflict_columns: list of columns forming the unique constraint.
+                          Defaults to [columns[0]] (first column = primary key).
+                          Pass multiple columns for composite unique constraints.
+
+    Examples:
+        # Single primary key (default):
+        insert_or_replace(db, 'teams', ['team_id', 'name'], (1, 'Duke'))
+
+        # Composite unique constraint:
+        insert_or_replace(db, 'ratings_archive',
+            ['team_id', 'season', 'archive_date', ...],
+            (1, 2026, '2026-03-04', ...),
+            conflict_columns=['team_id', 'season', 'archive_date']
+        )
     """
+    if conflict_columns is None:
+        conflict_columns = [columns[0]]
+
     if USE_POSTGRES:
         cols = ', '.join(f'"{c}"' for c in columns)
         placeholders = ', '.join(['%s'] * len(columns))
-        # On conflict with first column (usually primary key), update all others
-        pk = columns[0]
+        conflict_target = ', '.join(f'"{c}"' for c in conflict_columns)
         updates = ', '.join(
             f'"{c}" = EXCLUDED."{c}"'
-            for c in columns[1:]
+            for c in columns
+            if c not in conflict_columns
         )
         sql = f'''
             INSERT INTO "{table}" ({cols})
             VALUES ({placeholders})
-            ON CONFLICT ("{pk}") DO UPDATE SET {updates}
+            ON CONFLICT ({conflict_target}) DO UPDATE SET {updates}
         '''
     else:
         cols = ', '.join(columns)
@@ -200,8 +219,7 @@ def insert_or_replace(conn, table, columns, values):
         sql = f'INSERT OR REPLACE INTO "{table}" ({cols}) VALUES ({placeholders})'
 
     cursor = get_cursor(conn)
-    pg_sql = sql if USE_POSTGRES else sql
-    cursor.execute(pg_sql, values)
+    cursor.execute(sql, values)
     return cursor
 
 

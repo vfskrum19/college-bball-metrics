@@ -210,7 +210,8 @@ def fetch_four_factors_for_year(year):
                  team.get('DFT_Rate'), team.get('RankDFT_Rate'),
                  adj_oe, rank_adj_oe, adj_de, rank_adj_de,
                  adj_tempo, rank_adj_tempo, adj_em, rank_adj_em,
-                 'end-of-season', efficiency_source)
+                 'end-of-season', efficiency_source),
+                conflict_columns=['season', 'team_name']
             )
             inserted += 1
         except Exception as e:
@@ -280,7 +281,8 @@ def analyze_final_four_thresholds():
         insert_or_replace(db, 'final_four_analysis',
             ['metric', 'metric_display_name', 'threshold_rank',
              'pct_f4_meeting_threshold', 'sample_size', 'years_analyzed'],
-            (col, name, threshold, 85.0, 23, "Champions 2002-2025")
+            (col, name, threshold, 85.0, 23, "Champions 2002-2025"),
+            conflict_columns=['metric']
         )
 
     commit(db)
@@ -374,7 +376,8 @@ def calculate_current_contenders(season=CURRENT_SEASON):
              metrics_met, tier,
              ranks.get('rank_adj_oe'), ranks.get('rank_adj_de'),
              ranks.get('rank_efg_pct'), ranks.get('rank_defg_pct'),
-             ranks.get('rank_or_pct'))
+             ranks.get('rank_or_pct')),
+            conflict_columns=['team_id', 'season']
         )
 
     commit(db)
