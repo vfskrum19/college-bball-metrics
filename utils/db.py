@@ -91,14 +91,41 @@ def get_cursor(conn):
         return conn.cursor()
 
 
+def _pg_sql(sql):
+    """
+    Convert SQLite SQL to PostgreSQL-compatible SQL.
+
+    Handles:
+    1. ? placeholders  →  %s
+    2. date('now')     →  CURRENT_DATE  (SQLite date function)
+    3. game_date < CURRENT_DATE  →  game_date::date < CURRENT_DATE
+       game_date > CURRENT_DATE  →  game_date::date > CURRENT_DATE
+       (game_date is stored as TEXT; PostgreSQL won't compare text to date
+        without an explicit cast)
+    """
+    sql = sql.replace('?', '%s')
+    sql = sql.replace("date('now')", 'CURRENT_DATE')
+
+    # Cast any text date column comparisons against CURRENT_DATE
+    # Covers: game_date < CURRENT_DATE, game_date > CURRENT_DATE,
+    #         game_date <= CURRENT_DATE, game_date >= CURRENT_DATE
+    import re
+    sql = re.sub(
+        r'\bgame_date\s*(<=?|>=?|=)\s*CURRENT_DATE',
+        lambda m: f'game_date::date {m.group(1)} CURRENT_DATE',
+        sql
+    )
+    return sql
+
+
 def execute(conn, sql, params=None):
     """
     Execute a SQL statement on either database.
-    Automatically converts SQLite ? placeholders to PostgreSQL %s.
+    Automatically converts SQLite syntax to PostgreSQL where needed.
     Returns the cursor.
     """
     cursor = get_cursor(conn)
-    pg_sql = sql.replace('?', '%s') if USE_POSTGRES else sql
+    pg_sql = _pg_sql(sql) if USE_POSTGRES else sql
     cursor.execute(pg_sql, params or [])
     return cursor
 
@@ -109,7 +136,7 @@ def executemany(conn, sql, params_list):
     More efficient than calling execute() in a loop.
     """
     cursor = get_cursor(conn)
-    pg_sql = sql.replace('?', '%s') if USE_POSTGRES else sql
+    pg_sql = _pg_sql(sql) if USE_POSTGRES else sql
 
     if USE_POSTGRES:
         import psycopg2.extras
