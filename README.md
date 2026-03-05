@@ -1,400 +1,193 @@
-# 🏀 KenPom Bracketology App
+# Court Vision — College Basketball Analytics
 
-A comprehensive college basketball analytics platform powered by KenPom data, featuring:
-- **Team Comparison Tool** - Side-by-side matchup analysis with efficiency metrics
-- **Momentum Tracker** - Track hot/cold teams, find upset candidates
-- **Championship Contender Tiers** - Historical analysis identifying title-worthy teams
-- **Bracket Visualization** - NCAA tournament bracket with analytics overlays
+A full-stack analytics dashboard for NCAA Division I basketball, powered by KenPom data. Features team ratings, momentum tracking, tournament resume analysis, and championship contender scoring.
+
+Live at: https://college-bball-metrics-production.up.railway.app/ 
 
 ---
 
-## 📁 Project Structure
+## Features
 
-```
-kenpom-app/
-├── backend/
-│   └── app.py              # Flask API server
-├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── MomentumTracker.jsx
-│   │   │   ├── MomentumTracker.css
-│   │   │   ├── ComparisonTool.jsx
-│   │   │   └── ...
-│   │   └── App.jsx
-│   └── index.html
-├── scrapers/
-│   ├── fetch_data.py                    # Core KenPom data (ratings, four factors)
-│   ├── fetch_momentum_ratings.py        # Historical rating snapshots
-│   ├── fetch_game_scores_espn.py        # Game scores from ESPN
-│   ├── calculate_momentum.py            # Calculate momentum scores
-│   ├── fetch_historical_four_factors.py # Championship contender analysis
-│   ├── fetch_espn_branding.py           # Team logos and colors
-│   └── fetch_players.py                 # Player data
-├── database/
-│   └── kenpom.db           # SQLite database
-├── .env                    # API keys (not in git)
-└── README.md
-```
+- **Team Search & Compare** — side-by-side comparison of any two D1 teams with full KenPom metrics
+- **Momentum Tracker** — rolling performance trends based on actual game results vs. expectations
+- **Tournament Resume** — NET rankings and quad record breakdowns for every team
+- **Championship Contender Scores** — teams scored against historical metrics of national champions (2002–2025)
+- **Bracket Projections** — consensus bracket from Bracket Matrix (pre-Selection Sunday), switching to real bracket after
 
 ---
 
-## 🚀 Quick Start
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React (Vite) |
+| Backend | Flask (Python) |
+| Database | PostgreSQL (Railway) |
+| Hosting | Railway |
+| Data | KenPom API, ESPN API, NCAA.com |
+
+---
+
+## Architecture
+
+```
+project root/
+  cron.py               # Daily data pipeline runner
+  Dockerfile            # Multi-stage build: Node (React) + Python (Flask)
+  railway.toml          # Railway deployment config
+  requirements.txt      # Python dependencies
+  backend/              # Flask app, API routes, validators
+  frontend/             # React app (Vite)
+  scrapers/             # Data scrapers (KenPom, ESPN, NCAA)
+  utils/
+    db.py               # Shared database utility (SQLite local / PostgreSQL production)
+  database/             # SQLite file (local development only)
+```
+
+### Multi-stage Dockerfile
+Stage 1 builds the React frontend using Node. Stage 2 installs Python, copies the built frontend, and runs Flask via Gunicorn. The final image contains no Node runtime — only the compiled static assets.
+
+---
+
+## Railway Services
+
+| Service | Purpose | Schedule |
+|---------|---------|----------|
+| main app | Serves Flask API + React frontend | Always on |
+| metrics-cron | Runs daily data pipeline | 6:00am ET (10:00 UTC) |
+
+### Required Environment Variables
+
+| Variable | Service | Description |
+|----------|---------|-------------|
+| `DATABASE_URL` | Both | Auto-injected by Railway PostgreSQL plugin |
+| `KENPOM_API_KEY` | cron | KenPom API authentication |
+| `BRACKET_FINALIZED` | cron | `false` pre-Selection Sunday, `true` after |
+
+---
+
+## Daily Data Pipeline
+
+The cron service runs `cron.py` every morning at 6am ET. Steps run in order — a failure in one step does not abort the rest.
+
+| Step | Scraper | Role |
+|------|---------|------|
+| 1 | fetch_data.py | Teams, ratings, four factors from KenPom |
+| 2 | fetch_games.py | Game predictions (Fanmatch, last 3 days) |
+| 3 | import_bracket_matrix.py | Consensus bracket projection (optional, pre-Selection Sunday) |
+| 4 | fetch_momentum_ratings.py | Daily rating snapshots for trajectory |
+| 5 | fetch_game_scores_espn.py | Actual scores from ESPN API |
+| 6 | calculate_momentum.py | Momentum scores from game results |
+| 7 | fetch_historical_four_factors.py | Championship contender scores (optional) |
+
+Required steps failing will exit with code 1 (visible as a failed run in Railway dashboard). Optional steps log a warning and continue.
+
+---
+
+## Local Development
 
 ### Prerequisites
-- Python 3.10+
-- Node.js 18+
-- KenPom API subscription (for API key)
+- Python 3.12+
+- Node 20+
+- A `.env` file in the project root
+
+### .env file
+```
+KENPOM_API_KEY=your_key_here
+# Leave DATABASE_URL unset to use local SQLite
+```
 
 ### Setup
-
 ```bash
-# Clone and enter directory
-cd kenpom-app
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
 # Install Python dependencies
-pip install flask flask-cors requests python-dotenv
+pip install -r requirements.txt
 
 # Install frontend dependencies
-cd frontend
-npm install
-cd ..
+cd frontend && npm install && cd ..
 
-# Create .env file with your API key
-echo "KENPOM_API_KEY=your_key_here" > .env
+# Build frontend
+cd frontend && npm run build && cd ..
+
+# Run Flask dev server
+python backend/app.py
 ```
 
-### Run the App
-
+### Running scrapers locally
 ```bash
-# Terminal 1: Start backend
-cd backend
-python app.py
-
-# Terminal 2: Start frontend
-cd frontend
-npm run dev
-```
-
-Visit `http://localhost:5173`
-
----
-
-## 📊 Data Update Commands
-
-### ⚠️ IMPORTANT: Date Handling
-
-All data fetching scripts use **YESTERDAY** as the most recent date, not today. This is intentional because:
-- Today's games may still be in progress
-- KenPom updates ratings after all games complete
-- Weekend data is especially incomplete during the day
-
-### Daily Update Routine
-
-Run these commands in order to update all momentum data:
-
-```bash
-# 1. Fetch latest KenPom ratings and four factors
+# Full data sync
 python scrapers/fetch_data.py
 
-# 2. Fetch game predictions from KenPom Fanmatch
-python scrapers/fetch_games.py
-
-# 3. Fetch rating snapshots (for trajectory calculation)
-python scrapers/fetch_momentum_ratings.py
-
-# 4. Fetch game scores from ESPN
+# Specific scrapers
+python scrapers/fetch_games.py --days 7
 python scrapers/fetch_game_scores_espn.py
-
-# 5. Calculate momentum scores
-python scrapers/calculate_momentum.py
-```
-
-Or run the full pipeline with one command:
-```bash
-python scrapers/calculate_momentum.py --full
-```
-
----
-
-## 🔧 Individual Scraper Reference
-
-### `fetch_data.py` - Core KenPom Data
-Fetches current ratings, four factors, and team info.
-
-```bash
-# Full refresh of all data
-python scrapers/fetch_data.py
-
-# Specific data types
-python scrapers/fetch_data.py --ratings
-python scrapers/fetch_data.py --four-factors
-python scrapers/fetch_data.py --teams
-```
-
-**Tables updated:** `teams`, `ratings`, `four_factors`
-
----
-
-### `fetch_games.py` - Game Predictions (Fanmatch)
-Fetches KenPom Fanmatch predictions (predicted scores, win probabilities). **This populates the games table that everything else depends on.**
-
-```bash
-# Fetch last 30 days (default)
-python scrapers/fetch_games.py
-
-# Fetch last 45 days
-python scrapers/fetch_games.py --days 45
-
-# Fetch specific date
-python scrapers/fetch_games.py --date 2026-01-15
-```
-
-**Tables updated:** `games` (game_date, home/away teams, predicted scores, win probabilities)
-
-**Note:** Uses yesterday as end date. This must run BEFORE `fetch_game_scores_espn.py` since ESPN scores are matched against games in this table.
-
----
-
-### `fetch_momentum_ratings.py` - Historical Snapshots
-Fetches rating snapshots every 3 days for calculating trajectory.
-
-```bash
-# Fetch last 30 days (default)
-python scrapers/fetch_momentum_ratings.py
-
-# Fetch last 45 days
-python scrapers/fetch_momentum_ratings.py --days 45
-
-# Fetch specific date
-python scrapers/fetch_momentum_ratings.py --date 2026-01-15
-
-# Show statistics
-python scrapers/fetch_momentum_ratings.py --stats
-```
-
-**Tables updated:** `momentum_ratings`
-
-**Note:** Uses yesterday as end date. Snapshots are taken every 3 days to balance API calls vs data granularity.
-
----
-
-### `fetch_game_scores_espn.py` - Game Scores
-Fetches actual game scores from ESPN API to compare against predictions.
-
-```bash
-# Update all games missing scores
-python scrapers/fetch_game_scores_espn.py
-
-# Show statistics
-python scrapers/fetch_game_scores_espn.py --stats
-```
-
-**Tables updated:** `games` (home_score, away_score columns)
-
-**Note:** Only fetches past dates. Matches teams using a comprehensive name mapping (KenPom → ESPN).
-
----
-
-### `calculate_momentum.py` - Momentum Scores
-Calculates momentum scores using game results, vs-expected performance, and rating trajectory.
-
-```bash
-# Calculate for all teams
 python scrapers/calculate_momentum.py
 
-# Calculate for specific team
-python scrapers/calculate_momentum.py --team Duke
+# Test cron without executing
+python cron.py --dry-run
 
-# Show top 20 hottest teams
-python scrapers/calculate_momentum.py --top 20
-
-# Full pipeline (fetch + calculate)
-python scrapers/calculate_momentum.py --full
+# Run full pipeline manually
+python cron.py
 ```
 
-**Tables updated:** `momentum_cache`
+### Local vs Production database
+The `utils/db.py` utility auto-detects which database to use:
+- **No `DATABASE_URL` set** → uses `database/kenpom.db` (SQLite, local dev)
+- **`DATABASE_URL` set** → connects to PostgreSQL (Railway production)
 
-**Momentum Score Components:**
-| Component | Weight | Description |
-|-----------|--------|-------------|
-| Win % | 25 pts | Win percentage in last 10 games |
-| vs Expected | 30 pts | Performance vs KenPom predictions |
-| Win Streak | 10 pts | Current win streak bonus |
-| Rank Trajectory | 20 pts | Rank improvement over period |
-| Margin | 15 pts | Average margin of victory |
+All SQL syntax differences between SQLite and PostgreSQL are handled automatically in `utils/db.py` — scrapers don't need to know which database they're talking to.
 
 ---
 
-### `fetch_historical_four_factors.py` - Championship Analysis
-Analyzes historical Final Four/Champion data to identify meaningful metrics.
+## Manual Data Updates
 
-```bash
-# Full pipeline: fetch + analyze + score
-python scrapers/fetch_historical_four_factors.py --all
+Some data sources require manual intervention:
 
-# Individual steps
-python scrapers/fetch_historical_four_factors.py              # Fetch historical data
-python scrapers/fetch_historical_four_factors.py --analyze    # Run threshold analysis
-python scrapers/fetch_historical_four_factors.py --contenders # Score current teams
-python scrapers/fetch_historical_four_factors.py --stats      # Show database stats
+### NCAA Resume Data (NET rankings, quad records)
+1. Download `NCAA_Statistics.csv` from NCAA.com
+2. Run: `python scrapers/import_ncaa_data.py NCAA_Statistics.csv`
 
-# Fetch specific year
-python scrapers/fetch_historical_four_factors.py --year 2024
-```
-
-**Tables updated:** `historical_four_factors`, `final_four_analysis`, `contender_scores`
-
----
-
-### `fetch_espn_branding.py` - Team Logos & Colors
-Fetches team logos and primary/secondary colors from ESPN.
-
+### ESPN Team Branding (logos, colors)
+Run once per season or when teams are added:
 ```bash
 python scrapers/fetch_espn_branding.py
 ```
 
-**Tables updated:** `teams` (logo_url, primary_color, secondary_color)
+### Historical Four Factors (championship contender analysis)
+Run once to populate historical data (2002–2025), then the cron handles current season scoring:
+```bash
+python scrapers/fetch_historical_four_factors.py --all
+```
 
 ---
 
-## 📈 API Endpoints
+## Tournament Bracket
 
-### Momentum Tracker
-| Endpoint | Description |
-|----------|-------------|
-| `GET /api/momentum/rankings` | Get momentum rankings with filters |
-| `GET /api/momentum/team/<id>` | Get detailed momentum for one team |
-| `GET /api/momentum/upsets` | Get first-round upset candidates |
-| `GET /api/momentum/vulnerable` | Get vulnerable favorites |
-| `GET /api/momentum/conferences` | Get conference list for filtering |
+### Pre-Selection Sunday
+The cron imports the Bracket Matrix consensus projection daily. This reflects the aggregate of all major bracketologists' predictions.
 
-**Rankings Query Parameters:**
-- `limit` - Number of results (default: 50)
-- `min_games` - Minimum games played (default: 5)
-- `trend` - Filter by trend: hot, rising, stable, falling, cold
-- `tournament` - Tournament teams only: true/false
-- `kenpom_min`, `kenpom_max` - KenPom rank range
-- `conference` - Filter by conference name
-
-### Team Data
-| Endpoint | Description |
-|----------|-------------|
-| `GET /api/teams` | Get all teams |
-| `GET /api/team/<id>/ratings` | Get team ratings |
-| `GET /api/compare?team1=X&team2=Y` | Compare two teams |
-| `GET /api/search?q=query` | Search teams by name |
-
-### Bracket
-| Endpoint | Description |
-|----------|-------------|
-| `GET /api/bracket` | Get full bracket |
-| `GET /api/bracket/region/<n>` | Get region data |
-| `GET /api/matchup/<id>` | Get matchup details |
+### After Selection Sunday (~March 16)
+1. Run the ESPN bracket importer once to load the real field
+2. Set `BRACKET_FINALIZED=true` in the Railway cron environment variables
+3. The cron will skip bracket imports from that point — the real bracket doesn't change
 
 ---
 
-## 🗄️ Database Schema
+## API Endpoints
 
-### Core Tables
-- `teams` - Team info, logos, colors
-- `ratings` - Current KenPom ratings
-- `four_factors` - Current four factors data
-- `games` - Schedule with predictions and actual scores
-
-### Momentum Tables
-- `momentum_ratings` - Historical rating snapshots
-- `momentum_cache` - Calculated momentum scores
-
-### Tournament Tables
-- `bracket` - Tournament seeds and regions
-- `matchups` - First round matchups
-
-### Analysis Tables
-- `historical_four_factors` - Historical data (2002-2025)
-- `final_four_analysis` - Metric thresholds from champions
-- `contender_scores` - Current teams scored against thresholds
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/search` | GET | Search teams by name (`?q=duke`) |
+| `/api/team/:id` | GET | Full team data (ratings, four factors, resume) |
+| `/api/compare` | GET | Side-by-side team comparison (`?team1=id&team2=id`) |
+| `/api/momentum` | GET | Momentum rankings with tier filters |
+| `/api/bracket` | GET | Current bracket with seeds and regions |
+| `/api/contenders` | GET | Championship contender tier list |
 
 ---
 
-## 🐛 Troubleshooting
+## Security
 
-### "No momentum data showing"
-1. Check that games have scores: `python scrapers/fetch_game_scores_espn.py --stats`
-2. Run full momentum pipeline: `python scrapers/calculate_momentum.py --full`
-
-### "Team logos not showing"
-1. Check logo_url in database
-2. Re-fetch: `python scrapers/fetch_espn_branding.py`
-
-### "API returns empty data"
-1. Verify KENPOM_API_KEY in .env file
-2. Check API subscription status
-3. Try fetching yesterday's data (today may be incomplete)
-
-### "Team names don't match"
-ESPN and KenPom use different names. The mapping is in `fetch_game_scores_espn.py`. Add missing mappings to `KENPOM_TO_ESPN` dict.
-
----
-
-## 📅 Recommended Update Schedule
-
-| Frequency | Scripts | Purpose |
-|-----------|---------|---------|
-| Daily (morning) | `fetch_data.py`, `fetch_game_scores_espn.py`, `calculate_momentum.py` | Fresh ratings and momentum |
-| Every 3 days | `fetch_momentum_ratings.py` | Rating trajectory snapshots |
-| Weekly | `fetch_historical_four_factors.py --contenders` | Update contender tiers |
-| As needed | `fetch_espn_branding.py` | New team logos/colors |
-
----
-
-## 🏆 Championship Contender Methodology
-
-Based on analysis of 23 National Champions (2002-2025, excluding 2020):
-
-### Critical Metrics (75%+ of champions meet threshold)
-| Metric | Threshold | Champions Meeting |
-|--------|-----------|-------------------|
-| AdjEM Rank | Top 10 | 87% |
-| AdjOE Rank | Top 15 | 74% |
-| AdjDE Rank | Top 40 | 100% |
-
-### Important Metrics (useful but not dealbreakers)
-| Metric | Threshold | Champions Meeting |
-|--------|-----------|-------------------|
-| Defensive eFG% | Top 50 | 78% |
-| Offensive eFG% | Top 75 | 74% |
-| Offensive Reb% | Top 50 | 74% |
-
-### Tier Classification
-| Tier | Metrics Met (of 6) |
-|------|-------------------|
-| 🏆 Elite Contender | 5-6 |
-| 🎯 Strong Contender | 4 |
-| ⚠️ Flawed Contender | 2-3 |
-| ❌ Long Shot | 0-1 |
-
----
-
-## 📝 Notes
-
-- **Data Freshness:** KenPom updates ratings after each day's games complete. Morning runs get yesterday's complete picture.
-- **API Rate Limits:** Scripts include `time.sleep()` calls to be respectful to APIs.
-- **Season:** Current season is hardcoded as `CURRENT_SEASON = 2026` in scripts.
-
----
-
-## 🤝 Contributing
-
-1. Follow existing code patterns
-2. Add new scrapers to `/scrapers` directory
-3. Update this README with new commands
-4. Test with `--stats` flags before committing
-
----
-
-*Last updated: February 2, 2026*
+- Rate limiting on all API endpoints (Flask-Limiter)
+- Input validation and sanitization on all query parameters
+- CORS configured for production domain only
+- Bot protection via request validation middleware

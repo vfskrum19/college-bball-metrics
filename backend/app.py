@@ -40,19 +40,8 @@ except ImportError:
 # ============================================================
 # DATABASE: PostgreSQL in production, SQLite locally
 # ============================================================
-# WHY TWO DATABASES?
-#   Railway can't access a file on your laptop, so we use
-#   PostgreSQL there. Locally, SQLite still works fine for
-#   development - no server to spin up, no extra config.
-#
-# HOW IT WORKS:
-#   If DATABASE_URL is set (Railway always sets this automatically),
-#   we use PostgreSQL. If not, we fall back to SQLite.
-#   This means your local dev workflow is unchanged.
-# ============================================================
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
-# Railway sometimes provides postgres:// but psycopg2 needs postgresql://
 if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
     DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
 
@@ -80,7 +69,6 @@ CURRENT_SEASON = 2026
 
 
 class Config:
-    """Base configuration - shared across all environments"""
     DATABASE_PATH = DATABASE
     CURRENT_SEASON = CURRENT_SEASON
     MAX_RESULTS_LIMIT = 200
@@ -109,9 +97,6 @@ def create_app(config_name=None):
     if config_name is None:
         config_name = os.environ.get('FLASK_ENV', 'development')
 
-    # Serve built React files from frontend/dist in production.
-    # Flask looks for static files in this folder automatically.
-    # The assets subfolder (JS/CSS bundles) is served from /assets.
     frontend_dist = PROJECT_ROOT / 'frontend' / 'dist'
     app = Flask(__name__,
                 static_folder=str(frontend_dist / 'assets'),
@@ -120,36 +105,18 @@ def create_app(config_name=None):
     app.config.from_object(config_map.get(config_name, DevelopmentConfig))
 
     # ============================================================
-    # CORS: Lock down to known origins in production
-    # ============================================================
-    # WHY THIS MATTERS:
-    #   CORS(app) with no arguments = any website can call your API.
-    #   That means someone could build their own frontend that hits
-    #   your Railway backend and burns through your rate limits,
-    #   scrapes your data, or just costs you money.
-    #
-    # HOW IT WORKS:
-    #   In production (Railway), we only allow requests from your
-    #   Vercel domain. In development, we allow localhost so your
-    #   local React dev server can still talk to Flask.
-    #
-    # WHAT TO SET:
-    #   Add FRONTEND_URL=https://your-app.vercel.app to Railway's
-    #   environment variables. Until then, the fallback allows all
-    #   origins so you're not locked out during initial setup.
+    # CORS
     # ============================================================
     frontend_url = os.environ.get('FRONTEND_URL')
 
     if frontend_url:
-        # Production: only allow the specific Vercel domain
         CORS(app, origins=[frontend_url], supports_credentials=True)
         app.logger.info(f"CORS restricted to: {frontend_url}")
     else:
-        # Development fallback: allow localhost ports React commonly uses
         CORS(app, origins=[
-            "http://localhost:5173",  # Vite default
-            "http://localhost:3000",  # CRA default
-            "http://localhost:4173",  # Vite preview
+            "http://localhost:5173",
+            "http://localhost:3000",
+            "http://localhost:4173",
         ])
 
     # ============================================================
@@ -192,27 +159,8 @@ def create_app(config_name=None):
     # ============================================================
     # DATABASE CONNECTION MANAGEMENT
     # ============================================================
-    # WHY g (application context globals)?
-    #   Flask's g object lives for exactly one request. We store the
-    #   DB connection there so we open it once per request and close
-    #   it automatically when the request ends. This is more efficient
-    #   than opening/closing for every query, and safer than a single
-    #   global connection shared across requests.
-    #
-    # POSTGRES vs SQLITE:
-    #   The connection objects behave similarly - both support
-    #   .execute(), .fetchall(), etc. The main difference is that
-    #   Postgres uses %s placeholders instead of SQLite's ?.
-    #   We handle that with a query adapter below.
-    # ============================================================
 
     if USE_POSTGRES:
-        # Connection pool: maintain 2-10 connections ready to use.
-        # WHY POOL?
-        #   Opening a new database connection takes ~50-100ms.
-        #   Under load, making every request wait for a new connection
-        #   would be very slow. A pool keeps connections open and
-        #   hands them out to requests as needed.
         connection_pool = psycopg2.pool.ThreadedConnectionPool(
             minconn=2,
             maxconn=10,
@@ -223,26 +171,20 @@ def create_app(config_name=None):
             if 'db' not in g:
                 conn = connection_pool.getconn()
                 conn.autocommit = True
-                # Make rows behave like dicts (same as sqlite3.Row)
                 cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
                 g.db = conn
                 g.db_cursor = cursor
             return g.db
 
         def query_db(sql, params=None):
-            """
-            Execute a SQL query and return results as a list of dicts.
-            Converts SQLite ? placeholders to PostgreSQL %s automatically.
-            """
             get_db()
-            # SQLite uses ? for params, PostgreSQL uses %s
             pg_sql = sql.replace('?', '%s')
             g.db_cursor.execute(pg_sql, params or [])
             try:
                 rows = g.db_cursor.fetchall()
-                return rows  # List of RealDictRow - behaves like dict
+                return rows
             except psycopg2.ProgrammingError:
-                return []  # No results (INSERT/UPDATE/DELETE)
+                return []
 
         @app.teardown_appcontext
         def close_db(exception):
@@ -251,10 +193,9 @@ def create_app(config_name=None):
             if cursor:
                 cursor.close()
             if conn:
-                connection_pool.putconn(conn)  # Return to pool, don't close
+                connection_pool.putconn(conn)
 
     else:
-        # SQLite path - local development only
         def get_db():
             if 'db' not in g:
                 g.db = sqlite3.connect(str(app.config['DATABASE_PATH']))
@@ -311,28 +252,11 @@ def create_app(config_name=None):
     def serve_index():
         return send_from_directory(str(frontend_dist), 'index.html')
 
-    # ============================================================
-    # SPA CATCH-ALL ROUTE
-    # ============================================================
-    # WHY THIS IS NEEDED:
-    #   React Router handles navigation client-side (e.g. /bracket,
-    #   /momentum). When a user bookmarks /bracket and visits it
-    #   directly, the browser asks Flask for /bracket. Without this
-    #   route, Flask returns 404 because it doesn't know about
-    #   React Router paths.
-    #
-    #   This catch-all returns index.html for any non-API, non-asset
-    #   request, letting React Router take over and render the right
-    #   component. The @app.route order matters - API routes are
-    #   registered first, so /api/* never hits this catch-all.
-    # ============================================================
     @app.route('/<path:path>')
     def serve_spa(path):
-        # Serve actual files if they exist (favicon, robots.txt, etc.)
         file_path = frontend_dist / path
         if file_path.exists():
             return send_from_directory(str(frontend_dist), path)
-        # Everything else gets index.html - React Router handles it
         return send_from_directory(str(frontend_dist), 'index.html')
 
     # --- Team endpoints ---
@@ -478,6 +402,229 @@ def create_app(config_name=None):
             'last_update': last_update,
             'status': 'online',
             'database': 'postgresql' if USE_POSTGRES else 'sqlite'
+        })
+
+    # ============================================================
+    # SHOOTING STATS ENDPOINT
+    # ============================================================
+    # Returns ESPN-sourced shooting data for a team.
+    # This is what we use on team cards instead of KenPom Four Factors —
+    # 3PT% and FT% are freely available from ESPN and are better
+    # tournament-predictive metrics for public display anyway.
+    #
+    # Requires fetch_espn_shooting_stats.py to have been run first
+    # to populate the shooting columns on the teams table.
+    # ============================================================
+
+    @app.route('/api/team/<int:team_id>/shooting', methods=['GET'])
+    @validate_params
+    def get_team_shooting(team_id):
+        team = query_db(
+            '''SELECT team_id, name, fg3_pct, fg3_made, fg3_att,
+                      ft_pct, ft_made, ft_att, opp_fg3_pct, ft_rate,
+                      shooting_updated_at
+               FROM teams WHERE team_id = ?''',
+            (team_id,)
+        )
+
+        if not team:
+            return jsonify({'error': 'Team not found'}), 404
+
+        t = dict(team[0])
+
+        # If the scraper hasn't run yet for this team, return a clear
+        # indicator rather than a bunch of nulls. Frontend shows a
+        # "Stats loading..." state instead of a broken section.
+        if t.get('fg3_pct') is None:
+            return jsonify({
+                'team_id': team_id,
+                'shooting': None,
+                'message': 'Shooting stats not yet available — run fetch_espn_shooting_stats.py'
+            }), 200
+
+        return jsonify({
+            'team_id': team_id,
+            'shooting': {
+                'three_point': {
+                    'pct':  t['fg3_pct'],
+                    'made': t['fg3_made'],
+                    'att':  t['fg3_att'],
+                },
+                'free_throw': {
+                    'pct':  t['ft_pct'],
+                    'made': t['ft_made'],
+                    'att':  t['ft_att'],
+                },
+                # Defensive discipline — how well they limit opponent 3PT looks
+                'opp_fg3_pct': t['opp_fg3_pct'],
+                # FTA/FGA ratio — measures how aggressively they attack the rim,
+                # not just whether they make FTs once they get there
+                'ft_rate':     t['ft_rate'],
+                'updated_at':  t['shooting_updated_at'],
+            }
+        })
+
+    # ============================================================
+    # RESUME GAMES ENDPOINT (Quality Wins / Notable Losses)
+    # ============================================================
+    # This is the "ESPN bracket breakdown" style resume section.
+    # Returns top wins sorted by opponent quality and worst losses,
+    # each with home/away context, date, score, and opponent logo.
+    #
+    # Why a separate endpoint from /ratings?
+    #   The query is a UNION across games joined to opponent teams
+    #   and resume_metrics. It's heavier than a simple table lookup
+    #   and only needed when the resume section is rendered — keeping
+    #   it separate means /ratings stays fast for everything else.
+    #
+    # Defaults: 5 quality wins, 3 notable losses — matches ESPN's
+    # bracket breakdown style. Callers can override via query params.
+    # ============================================================
+
+    @app.route('/api/team/<int:team_id>/resume-games', methods=['GET'])
+    @validate_params
+    def get_resume_games(team_id):
+        # Safe integer parsing with capped maximums so callers
+        # can't request 500 games and hammer the DB
+        try:
+            wins_limit   = min(int(request.args.get('wins_limit',   5)), 10)
+            losses_limit = min(int(request.args.get('losses_limit', 3)),  8)
+        except ValueError:
+            wins_limit, losses_limit = 5, 3
+
+        team = query_db(
+            'SELECT team_id, name FROM teams WHERE team_id = ?',
+            (team_id,)
+        )
+
+        if not team:
+            return jsonify({'error': 'Team not found'}), 404
+
+        # ── Quality Wins ──────────────────────────────────────────
+        # UNION handles both cases: our team as home OR away.
+        # We join to the opponent's resume_metrics to get their NET
+        # rank — lower rank = more impressive win, so we sort ASC.
+        # NULLS LAST keeps teams without NET data at the bottom.
+        quality_wins_sql = '''
+            SELECT
+                g.game_id,
+                g.game_date,
+                opp.team_id   AS opp_team_id,
+                opp.name      AS opp_name,
+                opp.logo_url  AS opp_logo,
+                'vs'          AS location,
+                g.home_score  AS team_score,
+                g.away_score  AS opp_score,
+                r.net_rank    AS opp_net_rank
+            FROM games g
+            JOIN teams opp ON opp.team_id = g.away_team_id
+            LEFT JOIN resume_metrics r ON r.team_id = g.away_team_id
+            WHERE g.home_team_id = ?
+              AND g.home_score IS NOT NULL
+              AND g.home_score > g.away_score
+
+            UNION ALL
+
+            SELECT
+                g.game_id,
+                g.game_date,
+                opp.team_id   AS opp_team_id,
+                opp.name      AS opp_name,
+                opp.logo_url  AS opp_logo,
+                '@'           AS location,
+                g.away_score  AS team_score,
+                g.home_score  AS opp_score,
+                r.net_rank    AS opp_net_rank
+            FROM games g
+            JOIN teams opp ON opp.team_id = g.home_team_id
+            LEFT JOIN resume_metrics r ON r.team_id = g.home_team_id
+            WHERE g.away_team_id = ?
+              AND g.away_score IS NOT NULL
+              AND g.away_score > g.home_score
+
+            ORDER BY opp_net_rank ASC NULLS LAST
+            LIMIT ?
+        '''
+
+        # ── Notable Losses ────────────────────────────────────────
+        # Same structure, flipped win/loss condition.
+        # "Bad loss" label applied in Python below — a loss to a
+        # team ranked outside top 100 NET is flagged is_bad_loss=True.
+        notable_losses_sql = '''
+            SELECT
+                g.game_id,
+                g.game_date,
+                opp.team_id   AS opp_team_id,
+                opp.name      AS opp_name,
+                opp.logo_url  AS opp_logo,
+                'vs'          AS location,
+                g.home_score  AS team_score,
+                g.away_score  AS opp_score,
+                r.net_rank    AS opp_net_rank
+            FROM games g
+            JOIN teams opp ON opp.team_id = g.away_team_id
+            LEFT JOIN resume_metrics r ON r.team_id = g.away_team_id
+            WHERE g.home_team_id = ?
+              AND g.home_score IS NOT NULL
+              AND g.home_score < g.away_score
+
+            UNION ALL
+
+            SELECT
+                g.game_id,
+                g.game_date,
+                opp.team_id   AS opp_team_id,
+                opp.name      AS opp_name,
+                opp.logo_url  AS opp_logo,
+                '@'           AS location,
+                g.away_score  AS team_score,
+                g.home_score  AS opp_score,
+                r.net_rank    AS opp_net_rank
+            FROM games g
+            JOIN teams opp ON opp.team_id = g.home_team_id
+            LEFT JOIN resume_metrics r ON r.team_id = g.home_team_id
+            WHERE g.away_team_id = ?
+              AND g.away_score IS NOT NULL
+              AND g.away_score < g.home_score
+
+            ORDER BY opp_net_rank ASC NULLS LAST
+            LIMIT ?
+        '''
+
+        def format_game(row):
+            r = dict(row)
+            return {
+                'game_id':  r['game_id'],
+                'date':     r['game_date'],
+                'opponent': {
+                    'id':       r['opp_team_id'],
+                    'name':     r['opp_name'],
+                    'logo':     r['opp_logo'],
+                    'net_rank': r['opp_net_rank'],
+                },
+                'location': r['location'],  # "vs" (home) or "@" (away)
+                'score': {
+                    'team':     r['team_score'],
+                    'opponent': r['opp_score'],
+                },
+            }
+
+        wins_rows   = query_db(quality_wins_sql,   (team_id, team_id, wins_limit))
+        losses_rows = query_db(notable_losses_sql, (team_id, team_id, losses_limit))
+
+        quality_wins   = [format_game(r) for r in wins_rows]
+        notable_losses = [format_game(r) for r in losses_rows]
+
+        # Flag bad losses — lost to a team ranked outside top 100 NET
+        for loss in notable_losses:
+            net = loss['opponent']['net_rank']
+            loss['is_bad_loss'] = (net is not None and net > 100)
+
+        return jsonify({
+            'team_id':       team_id,
+            'team_name':     dict(team[0])['name'],
+            'quality_wins':  quality_wins,
+            'notable_losses': notable_losses,
         })
 
     # ============================================================
@@ -968,6 +1115,30 @@ def create_app(config_name=None):
             ORDER BY t.conference
         ''', (CURRENT_SEASON,))
         return jsonify([c['conference'] for c in conferences])
+
+    # ============================================================
+    # CONTENDERS ENDPOINT
+    # ============================================================
+
+    @app.route('/api/contenders', methods=['GET'])
+    @validate_params
+    def get_contenders():
+        season = validate_season(request.args.get('season')) or CURRENT_SEASON
+
+        contenders = query_db('''
+            SELECT cs.*, t.name, t.conference, t.logo_url,
+                   t.primary_color, t.secondary_color,
+                   r.rank_adj_em, r.adj_em, r.adj_oe, r.adj_de,
+                   b.seed, b.region
+            FROM contender_scores cs
+            JOIN teams t ON cs.team_id = t.team_id
+            LEFT JOIN ratings r ON cs.team_id = r.team_id AND r.season = cs.season
+            LEFT JOIN bracket b ON cs.team_id = b.team_id AND b.season = cs.season
+            WHERE cs.season = ?
+            ORDER BY cs.contender_score DESC
+        ''', (season,))
+
+        return jsonify([dict(c) for c in contenders])
 
     return app
 
