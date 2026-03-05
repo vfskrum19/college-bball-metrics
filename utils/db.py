@@ -103,7 +103,9 @@ def _pg_sql(sql):
     4. AUTOINCREMENT        →  (removed — PostgreSQL uses SERIAL which is
                                 declared in the column type, not a keyword)
     5. INTEGER PRIMARY KEY AUTOINCREMENT  →  SERIAL PRIMARY KEY
-    6. INSERT OR REPLACE    →  handled separately in insert_or_replace()
+    6. LIKE                 →  ILIKE (SQLite LIKE is case-insensitive by default,
+                                PostgreSQL LIKE is case-sensitive)
+    7. INSERT OR REPLACE    →  handled separately in insert_or_replace()
     """
     import re
 
@@ -120,7 +122,11 @@ def _pg_sql(sql):
     # Strip any remaining standalone AUTOINCREMENT keywords
     sql = re.sub(r'\bAUTOINCREMENT\b', '', sql, flags=re.IGNORECASE)
 
-    # Cast text date columns when compared to CURRENT_DATE
+
+    sql = re.sub(r'\bLIKE\b', 'ILIKE', sql, flags=re.IGNORECASE)
+
+    # PostgreSQL LIKE is case-sensitive unlike SQLite.
+    # Convert to ILIKE for case-insensitive matching.
     sql = re.sub(
         r'\bgame_date\s*(<=?|>=?|=)\s*CURRENT_DATE',
         lambda m: f'game_date::date {m.group(1)} CURRENT_DATE',
