@@ -488,7 +488,7 @@ def create_app(config_name=None):
         # can't request 500 games and hammer the DB
         try:
             wins_limit   = min(int(request.args.get('wins_limit',   5)), 10)
-            losses_limit = min(int(request.args.get('losses_limit', 3)),  8)
+            losses_limit = min(int(request.args.get('losses_limit', 5)),  8)
         except ValueError:
             wins_limit, losses_limit = 5, 3
 
@@ -587,7 +587,7 @@ def create_app(config_name=None):
               AND g.away_score IS NOT NULL
               AND g.away_score < g.home_score
 
-            ORDER BY opp_net_rank ASC NULLS LAST
+            ORDER BY opp_net_rank DESC NULLS LAST
             LIMIT ?
         '''
 

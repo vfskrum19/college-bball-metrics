@@ -199,7 +199,7 @@ function PlayerCard({ player, compact = false }) {
 function PlayerList({ teamId, showAll = false }) {
     const [players, setPlayers] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [expanded, setExpanded] = useState(false);
+
 
     useEffect(() => {
         if (!teamId) return;
@@ -229,9 +229,8 @@ function PlayerList({ teamId, showAll = false }) {
     const contributors = players.filter(p => p.role === 'contributor');
 
     // Show all if requested, otherwise show key players + expandable contributors
-    const visibleContributors = (showAll || expanded) ? contributors : contributors.slice(0, 2);
-
-    return (
+// Show all if requested, otherwise show key players + expandable contributors
+    const visibleContributors = contributors.slice(0, 4);    return (
         <div className="player-list">
             <h4 className="player-list-title">Key Players</h4>
             
@@ -240,7 +239,7 @@ function PlayerList({ teamId, showAll = false }) {
                 {xFactor && <PlayerCard player={xFactor} />}
             </div>
 
-            {contributors.length > 0 && (
+            {visibleContributors.length > 0 && (
                 <div className="contributors-section">
                     <h5 className="contributors-title">Contributors</h5>
                     <div className="contributors-grid">
@@ -248,15 +247,6 @@ function PlayerList({ teamId, showAll = false }) {
                             <PlayerCard key={player.player_id} player={player} compact />
                         ))}
                     </div>
-                    
-                    {!showAll && contributors.length > 2 && (
-                        <button 
-                            className="expand-contributors-btn"
-                            onClick={() => setExpanded(!expanded)}
-                        >
-                            {expanded ? 'Show Less' : `Show ${contributors.length - 2} More`}
-                        </button>
-                    )}
                 </div>
             )}
         </div>
