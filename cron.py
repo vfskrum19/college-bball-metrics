@@ -73,6 +73,19 @@ def run_contenders():
     if not results:
         raise RuntimeError("Contender calculation returned no results")
 
+def run_fetch_shooting_stats():
+    # ── Why optional? ─────────────────────────────────────────────────────────
+    # ESPN's stats endpoint is unofficial and could change format or go down.
+    # A failure here shouldn't tank the whole pipeline — KenPom ratings,
+    # momentum scores, and bracket data are all unaffected by shooting stats.
+    # The worst case if this fails: shooting section shows stale data from the
+    # previous day's run, which is fine.
+    # ─────────────────────────────────────────────────────────────────────────
+    from scrapers.fetch_espn_shooting_stats import fetch_shooting_stats
+    success = fetch_shooting_stats()
+    if not success:
+        raise RuntimeError("ESPN shooting stats returned 0 teams updated — API may be down or format changed")
+
 
 # ============================================================
 # PIPELINE DEFINITION
@@ -80,21 +93,22 @@ def run_contenders():
 
 def build_steps():
     steps = [
-        ("Fetch KenPom data (ratings, teams, four factors)", run_fetch_data,          False),
-        ("Fetch game predictions (Fanmatch, last 3 days)",   run_fetch_games,         False),
+        ("Fetch KenPom data (ratings, teams, four factors)", run_fetch_data,             False),
+        ("Fetch game predictions (Fanmatch, last 3 days)",   run_fetch_games,            False),
     ]
 
     if not BRACKET_FINALIZED:
         steps.append(
-        ("Import projected bracket (Bracket Matrix)",        run_import_bracket,      True))
+        ("Import projected bracket (Bracket Matrix)",        run_import_bracket,         True))
     else:
         print("ℹ BRACKET_FINALIZED=true — skipping bracket import")
 
     steps += [
         ("Fetch rating snapshots (momentum trajectory)",     run_fetch_momentum_ratings, False),
-        ("Fetch game scores (ESPN)",                         run_fetch_game_scores,   False),
-        ("Calculate momentum scores",                        run_calculate_momentum,  False),
-        ("Update championship contender scores",             run_contenders,          True),
+        ("Fetch game scores (ESPN)",                         run_fetch_game_scores,      False),
+        ("Calculate momentum scores",                        run_calculate_momentum,     False),
+        ("Update championship contender scores",             run_contenders,             True),
+        ("Fetch ESPN shooting stats (3PT%, FT%)",            run_fetch_shooting_stats,   True),
     ]
 
     return steps
@@ -136,7 +150,7 @@ def run_pipeline(dry_run=False):
             results.append((step_name, False, is_optional, error_msg))
             status = "⚠ OPTIONAL STEP FAILED" if is_optional else "❌ REQUIRED STEP FAILED"
             print(f"{status}: {e}")
-            print(error_msg)  # Full traceback in Railway logs for debugging
+            print(error_msg)
 
     # --------------------------------------------------------
     # Summary
@@ -164,7 +178,7 @@ def run_pipeline(dry_run=False):
 
     if required_failures:
         print(f"\n❌ {len(required_failures)} required step(s) failed")
-        sys.exit(1)  # Non-zero exit code flags the run as failed in Railway logs
+        sys.exit(1)
     elif optional_failures:
         print(f"\n⚠ Optional step(s) failed: {', '.join(optional_failures)}")
     else:
