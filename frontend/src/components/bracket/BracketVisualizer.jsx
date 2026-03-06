@@ -327,27 +327,34 @@ function TeamRow({ team, seed, position, isPlayIn = false }) {
 function MatchupModal({ matchup, onClose, onTeamClick }) {
     const { highTeam, lowTeam, region } = matchup;
     const [team1Data, setTeam1Data] = useState(null);
-    const [team2Data, setTeam2Data] = useState(null);
-    const [loading, setLoading] = useState(true);
+const [team2Data, setTeam2Data] = useState(null);
+const [team1Shooting, setTeam1Shooting] = useState(null);
+const [team2Shooting, setTeam2Shooting] = useState(null);
+const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const [res1, res2] = await Promise.all([
-                    fetch(`/api/team/${highTeam.team_id}/ratings`),
-                    fetch(`/api/team/${lowTeam.team_id}/ratings`)
-                ]);
-                setTeam1Data(await res1.json());
-                setTeam2Data(await res2.json());
-                setLoading(false);
-            } catch (err) {
-                console.error('Error fetching matchup data:', err);
-                setLoading(false);
-            }
-        };
-        fetchData();
-    }, [highTeam.team_id, lowTeam.team_id]);
-
+useEffect(() => {
+    const fetchData = async () => {
+        try {
+            const [res1, res2, shot1, shot2] = await Promise.all([
+                fetch(`/api/team/${highTeam.team_id}/ratings`),
+                fetch(`/api/team/${lowTeam.team_id}/ratings`),
+                fetch(`/api/team/${highTeam.team_id}/shooting`),
+                fetch(`/api/team/${lowTeam.team_id}/shooting`),
+            ]);
+            setTeam1Data(await res1.json());
+            setTeam2Data(await res2.json());
+            const s1 = await shot1.json();
+            const s2 = await shot2.json();
+            setTeam1Shooting(s1.shooting ?? null);
+            setTeam2Shooting(s2.shooting ?? null);
+            setLoading(false);
+        } catch (err) {
+            console.error('Error fetching matchup data:', err);
+            setLoading(false);
+        }
+    };
+    fetchData();
+}, [highTeam.team_id, lowTeam.team_id]);
     if (!highTeam || !lowTeam) return null;
 
     const kenPomDiff = (highTeam.adj_em - lowTeam.adj_em).toFixed(1);
@@ -420,8 +427,16 @@ function MatchupModal({ matchup, onClose, onTeamClick }) {
 
                             <div className="stats-section">
                                 <div className="stats-section-title">Shooting</div>
-                                <StatBar label="eFG%" val1={team1Data?.four_factors?.efg_pct?.toFixed(1) || 'N/A'} val2={team2Data?.four_factors?.efg_pct?.toFixed(1) || 'N/A'} />
-                                <StatBar label="FT Rate" val1={team1Data?.four_factors?.ft_rate?.toFixed(1) || 'N/A'} val2={team2Data?.four_factors?.ft_rate?.toFixed(1) || 'N/A'} />
+                                <StatBar
+                                    label="3PT%"
+                                    val1={team1Shooting?.three_point?.pct != null ? `${team1Shooting.three_point.pct.toFixed(1)}%` : 'N/A'}
+                                    val2={team2Shooting?.three_point?.pct != null ? `${team2Shooting.three_point.pct.toFixed(1)}%` : 'N/A'}
+                                />
+                                <StatBar
+                                    label="FT%"
+                                    val1={team1Shooting?.free_throw?.pct != null ? `${team1Shooting.free_throw.pct.toFixed(1)}%` : 'N/A'}
+                                    val2={team2Shooting?.free_throw?.pct != null ? `${team2Shooting.free_throw.pct.toFixed(1)}%` : 'N/A'}
+                                />
                             </div>
 
                             <div className="stats-section resume-section">
