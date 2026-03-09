@@ -30,11 +30,11 @@ import os
 import sys
 import time
 import requests
+from datetime import datetime
 from difflib import SequenceMatcher
 
-# Add project root to path so we can import utils/db.py
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-from utils.db import get_db
+from utils.db import get_db, execute, commit
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -50,7 +50,6 @@ REQUEST_TIMEOUT = 10    # seconds before giving up on a single request
 MANUAL_MAPPINGS = {
     # ── Confirmed from ESPN debug output (exact displayName including mascot) ──
     "Appalachian St.":       "App State Mountaineers",
-    "Arkansas Pine Bluff":   "Arkansas Pine-Bluff Golden Lions",
     "LIU":                   "Long Island University Sharks",
     "Louisiana Monroe":      "Louisiana Monroe Warhawks",
     "Massachusetts":         "Massachusetts Minutemen",
@@ -83,7 +82,7 @@ MANUAL_MAPPINGS = {
     "Illinois Chicago":      "UIC Flames",
     "IU Indy":               "IU Indianapolis Jaguars",
     "Long Island":           "Long Island University Sharks",
-    "Louisiana Monroe":      "UL Monroe Warhawks",
+    "Louisiana Monroe":      "Louisiana Monroe Warhawks",
     "Loyola Chicago":        "Loyola Chicago Ramblers",
     "Loyola MD":             "Loyola Maryland Greyhounds",
     "McNeese St.":           "McNeese Cowboys",
@@ -160,7 +159,7 @@ MANUAL_MAPPINGS = {
     "Nicholls St.":          "Nicholls Colonels",
     "Queens":                "Queens University Royals",
     "Southeastern Louisiana":"SE Louisiana Lions",
-    "St. Thomas":            "St. Thomas-Minnesota Tommies",
+    "St. Thomas":            "St. Thomas (MN) Tommies",
     "Albany":                "UAlbany Great Danes",
     "Tarleton St.":          "Tarleton State Texans",
     "Tarleton":              "Tarleton State Texans",
@@ -204,6 +203,7 @@ def add_shooting_columns():
         ("fg3_pct",             "REAL"),
         ("fg3_made",            "REAL"),
         ("fg3_att",             "REAL"),
+        ("fg3_rate",            "REAL"),
         ("ft_pct",              "REAL"),
         ("ft_made",             "REAL"),
         ("ft_att",              "REAL"),
@@ -212,16 +212,15 @@ def add_shooting_columns():
         ("shooting_updated_at", "TEXT"),
     ]
 
-    added = 0
+    # IF NOT EXISTS lets PostgreSQL handle the "already exists" case without
+    # a bare except that silently swallows real errors (bad perms, typos, etc.)
     for col_name, col_type in new_columns:
-        try:
-            cursor.execute(f"ALTER TABLE teams ADD COLUMN {col_name} {col_type}")
-            added += 1
-        except Exception:
-            pass  # Column already exists
+        cursor.execute(
+            f"ALTER TABLE teams ADD COLUMN IF NOT EXISTS {col_name} {col_type}"
+        )
 
     db.commit()
-    print(f"✓ Shooting stat columns ready ({added} new columns added)")
+    print(f"[OK] Shooting stat columns ready — {len(new_columns)} columns verified in schema")
 
 # ── Step 2: ESPN team list (ESPN's own IDs) ───────────────────────────────────
 
@@ -351,7 +350,14 @@ def fetch_team_shooting(espn_id, team_name):
         stats = {}
         fga = None
 
-        for category in data.get("splits", {}).get("categories", []):
+        # ESPN's response structure varies — try all known paths
+        categories = (
+            data.get("results", {}).get("stats", {}).get("categories")
+            or data.get("stats", {}).get("categories")
+            or []
+        )
+
+        for category in categories:
             for stat in category.get("stats", []):
                 name  = stat.get("name", "")
                 value = stat.get("value")
@@ -362,15 +368,15 @@ def fetch_team_shooting(espn_id, team_name):
                 except (TypeError, ValueError):
                     continue
 
-                # ESPN returns percentages as decimals — multiply by 100
+                # ESPN returns percentages already as percentages (e.g. 32.5 not 0.325)
                 if name == "threePointFieldGoalPct":
-                    stats["fg3_pct"] = round(val * 100, 1)
+                    stats["fg3_pct"] = round(val, 1)
                 elif name == "threePointFieldGoalsMade":
                     stats["fg3_made"] = round(val, 1)
                 elif name == "threePointFieldGoalsAttempted":
                     stats["fg3_att"] = round(val, 1)
                 elif name == "freeThrowPct":
-                    stats["ft_pct"] = round(val * 100, 1)
+                    stats["ft_pct"] = round(val, 1)
                 elif name == "freeThrowsMade":
                     stats["ft_made"] = round(val, 1)
                 elif name == "freeThrowsAttempted":
@@ -378,11 +384,15 @@ def fetch_team_shooting(espn_id, team_name):
                 elif name == "fieldGoalsAttempted":
                     fga = val
                 elif name == "opponentThreePointFieldGoalPct":
-                    stats["opp_fg3_pct"] = round(val * 100, 1)
+                    stats["opp_fg3_pct"] = round(val, 1)
 
-        # FT rate = FTA/FGA — frequency of getting to the line, not just making them
+        # FT rate = FTA/FGA — how often they get to the line
         if "ft_att" in stats and fga and fga > 0:
             stats["ft_rate"] = round(stats["ft_att"] / fga, 3)
+
+        # 3PA rate = 3PA/FGA — how often they shoot threes (shot profile)
+        if "fg3_att" in stats and fga and fga > 0:
+            stats["fg3_rate"] = round(stats["fg3_att"] / fga, 3)
 
         return stats if stats else None
 
@@ -395,17 +405,17 @@ def fetch_team_shooting(espn_id, team_name):
 def update_team_shooting(team_id, stats):
     """Update shooting columns on the teams table row for this team_id."""
     db = get_db()
-    cursor = db.cursor()
 
     column_map = {
-        "fg3_pct":    "fg3_pct",
-        "fg3_made":   "fg3_made",
-        "fg3_att":    "fg3_att",
-        "ft_pct":     "ft_pct",
-        "ft_made":    "ft_made",
-        "ft_att":     "ft_att",
-        "opp_fg3_pct":"opp_fg3_pct",
-        "ft_rate":    "ft_rate",
+        "fg3_pct":     "fg3_pct",
+        "fg3_made":    "fg3_made",
+        "fg3_att":     "fg3_att",
+        "fg3_rate":    "fg3_rate",
+        "ft_pct":      "ft_pct",
+        "ft_made":     "ft_made",
+        "ft_att":      "ft_att",
+        "opp_fg3_pct": "opp_fg3_pct",
+        "ft_rate":     "ft_rate",
     }
 
     set_clauses = []
@@ -419,14 +429,15 @@ def update_team_shooting(team_id, stats):
     if not set_clauses:
         return
 
-    set_clauses.append("shooting_updated_at = CURRENT_TIMESTAMP")
+    set_clauses.append("shooting_updated_at = ?")
+    values.append(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
     values.append(team_id)
 
     sql = f"UPDATE teams SET {', '.join(set_clauses)} WHERE team_id = ?"
 
     try:
-        cursor.execute(sql, values)
-        db.commit()
+        execute(db, sql, values)
+        commit(db)
     except Exception as e:
         print(f"    DB update failed for team_id={team_id}: {e}")
         try:

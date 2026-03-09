@@ -89,11 +89,8 @@ function ShootingProfile({ teamId }) {
         );
     }
 
-    // Safely destructure — API shape may vary if scraper hasn't run yet
-    const threePoint = shooting?.three_point ?? {};
-    const freeThrow  = shooting?.free_throw  ?? {};
-
-    if (!shooting || (!threePoint.pct && !freeThrow.pct)) {
+    // API now returns a flat shape — all values are top-level on the shooting object
+    if (!shooting?.three_point_pct && !shooting?.free_throw_pct) {
         return (
             <div className="metrics-section">
                 <h3 className="section-title">Shooting Profile</h3>
@@ -106,6 +103,11 @@ function ShootingProfile({ teamId }) {
         );
     }
 
+    // FT rate stored as decimal (0.348) — multiply by 100 for xx.x% display
+    const ftRateDisplay      = shooting.ft_rate      != null ? (shooting.ft_rate * 100).toFixed(1)      : null;
+    // 3PA rate stored as decimal (0.412) — same treatment
+    const threePtRateDisplay = shooting.three_point_rate != null ? (shooting.three_point_rate * 100).toFixed(1) : null;
+
     return (
         <div className="metrics-section">
             <h3 className="section-title">Shooting Profile</h3>
@@ -116,28 +118,27 @@ function ShootingProfile({ teamId }) {
                 <div className="metric-row">
                     <span className="metric-label">3PT%</span>
                     <span className="metric-value">
-                        {threePoint.pct?.toFixed(1)}%
-                        <span className="metric-sub">
-                            ({threePoint.made?.toFixed(1)}-{threePoint.att?.toFixed(1)})
-                        </span>
+                        {shooting.three_point_pct?.toFixed(1)}%
+                    </span>
+                </div>
+                <div className="metric-row">
+                    {/* 3PA Rate = 3PA/FGA — how three-heavy their offense is */}
+                    <span className="metric-label">3PA Rate <span style={{ color: '#888', fontSize: '0.72rem' }}>(3PA/FGA)</span></span>
+                    <span className="metric-value">
+                        {threePtRateDisplay != null ? `${threePtRateDisplay}%` : <span style={{ color: '#888' }}>N/A</span>}
                     </span>
                 </div>
                 <div className="metric-row">
                     <span className="metric-label">FT%</span>
                     <span className="metric-value">
-                        {freeThrow.pct?.toFixed(1)}%
-                        <span className="metric-sub">
-                            ({freeThrow.made?.toFixed(1)}-{freeThrow.att?.toFixed(1)})
-                        </span>
+                        {shooting.free_throw_pct?.toFixed(1)}%
                     </span>
                 </div>
                 <div className="metric-row">
-                    <span className="metric-label">FT Rate</span>
+                    {/* FT Rate = FTA/FGA — how aggressively they get to the line */}
+                    <span className="metric-label">FT Rate <span style={{ color: '#888', fontSize: '0.72rem' }}>(FTA/FGA)</span></span>
                     <span className="metric-value">
-                        {shooting.ft_rate?.toFixed(3)}
-                        <span className="metric-sub" style={{ marginLeft: '6px', color: '#888', fontSize: '0.75rem' }}>
-                            FTA/FGA
-                        </span>
+                        {ftRateDisplay != null ? `${ftRateDisplay}%` : <span style={{ color: '#888' }}>N/A</span>}
                     </span>
                 </div>
             </div>

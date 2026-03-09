@@ -420,8 +420,8 @@ def create_app(config_name=None):
     @validate_params
     def get_team_shooting(team_id):
         team = query_db(
-            '''SELECT team_id, name, fg3_pct, fg3_made, fg3_att,
-                      ft_pct, ft_made, ft_att, opp_fg3_pct, ft_rate,
+            '''SELECT team_id, name, fg3_pct, fg3_att, fg3_rate,
+                      ft_pct, ft_att, opp_fg3_pct, ft_rate,
                       shooting_updated_at
                FROM teams WHERE team_id = ?''',
             (team_id,)
@@ -432,9 +432,6 @@ def create_app(config_name=None):
 
         t = dict(team[0])
 
-        # If the scraper hasn't run yet for this team, return a clear
-        # indicator rather than a bunch of nulls. Frontend shows a
-        # "Stats loading..." state instead of a broken section.
         if t.get('fg3_pct') is None:
             return jsonify({
                 'team_id': team_id,
@@ -445,22 +442,16 @@ def create_app(config_name=None):
         return jsonify({
             'team_id': team_id,
             'shooting': {
-                'three_point': {
-                    'pct':  t['fg3_pct'],
-                    'made': t['fg3_made'],
-                    'att':  t['fg3_att'],
-                },
-                'free_throw': {
-                    'pct':  t['ft_pct'],
-                    'made': t['ft_made'],
-                    'att':  t['ft_att'],
-                },
-                # Defensive discipline — how well they limit opponent 3PT looks
-                'opp_fg3_pct': t['opp_fg3_pct'],
-                # FTA/FGA ratio — measures how aggressively they attack the rim,
-                # not just whether they make FTs once they get there
-                'ft_rate':     t['ft_rate'],
-                'updated_at':  t['shooting_updated_at'],
+                # Percentages only — season totals (made/att) removed, they add noise
+                'three_point_pct':  t['fg3_pct'],
+                # 3PA/FGA — how three-point heavy their offense is (shot profile)
+                'three_point_rate': t['fg3_rate'],
+                'free_throw_pct':   t['ft_pct'],
+                # FTA/FGA — how aggressively they get to the line
+                'ft_rate':          t['ft_rate'],
+                # Defensive discipline — opponent 3PT% allowed
+                'opp_fg3_pct':      t['opp_fg3_pct'],
+                'updated_at':       t['shooting_updated_at'],
             }
         })
 
@@ -488,7 +479,7 @@ def create_app(config_name=None):
         # can't request 500 games and hammer the DB
         try:
             wins_limit   = min(int(request.args.get('wins_limit',   5)), 10)
-            losses_limit = min(int(request.args.get('losses_limit', 5)),  8)
+            losses_limit = min(int(request.args.get('losses_limit', 3)),  8)
         except ValueError:
             wins_limit, losses_limit = 5, 3
 
@@ -587,7 +578,7 @@ def create_app(config_name=None):
               AND g.away_score IS NOT NULL
               AND g.away_score < g.home_score
 
-            ORDER BY opp_net_rank DESC NULLS LAST
+            ORDER BY opp_net_rank ASC NULLS LAST
             LIMIT ?
         '''
 
