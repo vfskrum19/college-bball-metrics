@@ -359,6 +359,8 @@ useEffect(() => {
 
     const kenPomDiff = (highTeam.adj_em - lowTeam.adj_em).toFixed(1);
     const favorite = highTeam.adj_em > lowTeam.adj_em ? highTeam : lowTeam;
+    const fmtRate = (val) => val != null ? `${(val * 100).toFixed(1)}%` : 'N/A';
+    const fmtPct  = (val) => val != null ? `${val.toFixed(1)}%` : 'N/A';
 
     const getBadLosses = (data) => {
         if (!data?.resume) return 0;
@@ -427,16 +429,10 @@ useEffect(() => {
 
                             <div className="stats-section">
                                 <div className="stats-section-title">Shooting</div>
-                                <StatBar
-                                    label="3PT%"
-                                    val1={team1Shooting?.three_point?.pct != null ? `${team1Shooting.three_point.pct.toFixed(1)}%` : 'N/A'}
-                                    val2={team2Shooting?.three_point?.pct != null ? `${team2Shooting.three_point.pct.toFixed(1)}%` : 'N/A'}
-                                />
-                                <StatBar
-                                    label="FT%"
-                                    val1={team1Shooting?.free_throw?.pct != null ? `${team1Shooting.free_throw.pct.toFixed(1)}%` : 'N/A'}
-                                    val2={team2Shooting?.free_throw?.pct != null ? `${team2Shooting.free_throw.pct.toFixed(1)}%` : 'N/A'}
-                                />
+                                <StatBar label="3PT%"    val1={fmtPct(team1Shooting?.three_point_pct)}  val2={fmtPct(team2Shooting?.three_point_pct)} />
+                                <StatBar label="3PA Rate" val1={fmtRate(team1Shooting?.three_point_rate)} val2={fmtRate(team2Shooting?.three_point_rate)} />
+                                <StatBar label="FT%"     val1={fmtPct(team1Shooting?.free_throw_pct)}   val2={fmtPct(team2Shooting?.free_throw_pct)} />
+                                <StatBar label="FT Rate" val1={fmtRate(team1Shooting?.ft_rate)}          val2={fmtRate(team2Shooting?.ft_rate)} />
                             </div>
 
                             <div className="stats-section resume-section">
