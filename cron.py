@@ -86,6 +86,16 @@ def run_fetch_shooting_stats():
     if not success:
         raise RuntimeError("ESPN shooting stats returned 0 teams updated — API may be down or format changed")
 
+def run_generate_narratives():
+    # ── Why optional? ─────────────────────────────────────────────────────────
+    # Narrative generation calls the Anthropic API for every team (~365 calls).
+    # A failure here — API outage, rate limit, billing issue — shouldn't block
+    # ratings, momentum, or bracket data from updating. Worst case: narratives
+    # show stale text from the previous run, which is acceptable.
+    # ─────────────────────────────────────────────────────────────────────────
+    from scrapers.generate_narratives import run_generate_narratives as _run
+    _run()
+
 
 # ============================================================
 # PIPELINE DEFINITION
@@ -109,6 +119,7 @@ def build_steps():
         ("Calculate momentum scores",                        run_calculate_momentum,     False),
         ("Update championship contender scores",             run_contenders,             True),
         ("Fetch ESPN shooting stats (3PT%, FT%)",            run_fetch_shooting_stats,   True),
+        ("Generate team narratives (Anthropic)",             run_generate_narratives,    True),
     ]
 
     return steps

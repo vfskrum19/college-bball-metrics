@@ -397,6 +397,29 @@ useEffect(() => {
                             />
                         </div>
 
+                          {/* Scouting Narratives */}
+                        {(team1Data?.narrative || team2Data?.narrative) && (
+                            <div className="modal-narratives">
+                                <h4>Scouting Report</h4>
+                                <div className="narratives-comparison">
+                                    <div className="narrative-team">
+                                        {team1Data?.narrative ? (
+                                            <p className="narrative-text">{team1Data.narrative}</p>
+                                        ) : (
+                                            <p className="narrative-text narrative-empty">No scouting report available.</p>
+                                        )}
+                                    </div>
+                                    <div className="narrative-divider"></div>
+                                    <div className="narrative-team">
+                                        {team2Data?.narrative ? (
+                                            <p className="narrative-text">{team2Data.narrative}</p>
+                                        ) : (
+                                            <p className="narrative-text narrative-empty">No scouting report available.</p>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                         {/* Key Players Section */}
                         <div className="modal-players">
                             <h4>Key Players</h4>

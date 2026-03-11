@@ -317,7 +317,7 @@ function GameRow({ game, isWin }) {
 // ── Main TeamCard ─────────────────────────────────────────────────────────────
 
 function TeamCard({ data, showPlayers = true }) {
-    const { team, ratings, resume } = data;
+    const { team, ratings, resume, narrative } = data;
     // four_factors intentionally omitted — replaced by ShootingProfile
 
     if (!team || !ratings) {
@@ -370,6 +370,28 @@ function TeamCard({ data, showPlayers = true }) {
                         </div>
                     </div>
                 </div>
+
+                {/* ── Narrative ── */}
+                {narrative && (
+                    <div style={{
+                        padding: '12px 16px',
+                        margin: '8px 0',
+                        borderLeft: `3px solid ${primaryColor}`,
+                        backgroundColor: primaryColor + '12',
+                        borderRadius: '0 6px 6px 0',
+                    }}>
+                        <p style={{
+                            margin: 0,
+                            fontSize: '0.85rem',
+                            lineHeight: '1.6',
+                            color: headerTextColor,
+                            fontStyle: 'italic',
+                            opacity: 0.9,
+                        }}>
+                            {narrative}
+                        </p>
+                    </div>
+                )}
 
                 {/* ── Overall Rankings ── */}
                 <div className="metrics-section">

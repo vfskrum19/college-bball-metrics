@@ -1,193 +1,138 @@
-# Court Vision — College Basketball Analytics
+# NCAA Tournament Analytics App
 
-A full-stack analytics dashboard for NCAA Division I basketball, powered by KenPom data. Features team ratings, momentum tracking, tournament resume analysis, and championship contender scoring.
+A full-stack web app for tracking college basketball metrics heading into March Madness. Pulls from KenPom (ratings), ESPN (shooting stats, scores, team branding), and the Bracket Matrix (projected field), and presents it all in an interactive bracket and team card interface.
 
-Live at: https://college-bball-metrics-production.up.railway.app/ 
+## Stack
 
----
-
-## Features
-
-- **Team Search & Compare** — side-by-side comparison of any two D1 teams with full KenPom metrics
-- **Momentum Tracker** — rolling performance trends based on actual game results vs. expectations
-- **Tournament Resume** — NET rankings and quad record breakdowns for every team
-- **Championship Contender Scores** — teams scored against historical metrics of national champions (2002–2025)
-- **Bracket Projections** — consensus bracket from Bracket Matrix (pre-Selection Sunday), switching to real bracket after
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React (Vite) |
-| Backend | Flask (Python) |
+| Layer | Tech |
+|-------|------|
+| Frontend | React (Vite), served as static files by Flask |
+| Backend | Flask (Python), Gunicorn |
 | Database | PostgreSQL (Railway) |
-| Hosting | Railway |
-| Data | KenPom API, ESPN API, NCAA.com |
+| Hosting | Railway (app + cron as separate services) |
+| Data | KenPom API, ESPN public API, Bracket Matrix |
 
----
-
-## Architecture
+## Project Structure
 
 ```
-project root/
-  cron.py               # Daily data pipeline runner
-  Dockerfile            # Multi-stage build: Node (React) + Python (Flask)
-  railway.toml          # Railway deployment config
-  requirements.txt      # Python dependencies
-  backend/              # Flask app, API routes, validators
-  frontend/             # React app (Vite)
-  scrapers/             # Data scrapers (KenPom, ESPN, NCAA)
-  utils/
-    db.py               # Shared database utility (SQLite local / PostgreSQL production)
-  database/             # SQLite file (local development only)
+/
+├── backend/
+│   └── app.py                  # Flask app factory + all API routes
+├── frontend/
+│   └── src/
+│       └── components/
+│           ├── BracketVisualizer.jsx
+│           ├── compare/TeamCard.jsx
+│           └── player/PlayerCard.jsx
+├── scrapers/
+│   ├── fetch_data.py                   # KenPom ratings + teams
+│   ├── fetch_games.py                  # Fanmatch predictions
+│   ├── fetch_game_scores_espn.py       # Actual game scores
+│   ├── fetch_momentum_ratings.py       # Daily rating snapshots
+│   ├── calculate_momentum.py           # Momentum score computation
+│   ├── fetch_historical_four_factors.py
+│   ├── import_bracket_matrix.py        # Projected bracket (pre-Selection Sunday)
+│   ├── fetch_espn_shooting_stats.py    # 3PT%, FT%, FT Rate, 3PA Rate
+│   └── fetch_espn_branding.py          # Team logos + colors (manual)
+├── utils/
+│   └── db.py                           # DB connection + SQLite→PostgreSQL translation
+├── cron.py                             # Daily pipeline runner
+├── Dockerfile                          # Multi-stage: Node build + Python runtime
+└── railway.toml
 ```
 
-### Multi-stage Dockerfile
-Stage 1 builds the React frontend using Node. Stage 2 installs Python, copies the built frontend, and runs Flask via Gunicorn. The final image contains no Node runtime — only the compiled static assets.
+## Daily Pipeline (cron.py)
 
----
+Runs at 6:00am ET via Railway cron service (`0 10 * * *`).
 
-## Railway Services
-
-| Service | Purpose | Schedule |
-|---------|---------|----------|
-| main app | Serves Flask API + React frontend | Always on |
-| metrics-cron | Runs daily data pipeline | 6:00am ET (10:00 UTC) |
-
-### Required Environment Variables
-
-| Variable | Service | Description |
-|----------|---------|-------------|
-| `DATABASE_URL` | Both | Auto-injected by Railway PostgreSQL plugin |
-| `KENPOM_API_KEY` | cron | KenPom API authentication |
-| `BRACKET_FINALIZED` | cron | `false` pre-Selection Sunday, `true` after |
-
----
-
-## Daily Data Pipeline
-
-The cron service runs `cron.py` every morning at 6am ET. Steps run in order — a failure in one step does not abort the rest.
-
-| Step | Scraper | Role |
+| Step | Scraper | Type |
 |------|---------|------|
-| 1 | fetch_data.py | Teams, ratings, four factors from KenPom |
-| 2 | fetch_games.py | Game predictions (Fanmatch, last 3 days) |
-| 3 | import_bracket_matrix.py | Consensus bracket projection (optional, pre-Selection Sunday) |
-| 4 | fetch_momentum_ratings.py | Daily rating snapshots for trajectory |
-| 5 | fetch_game_scores_espn.py | Actual scores from ESPN API |
-| 6 | calculate_momentum.py | Momentum scores from game results |
-| 7 | fetch_historical_four_factors.py | Championship contender scores (optional) |
+| 1 | fetch_data.py | Required |
+| 2 | fetch_games.py | Required |
+| 3 | import_bracket_matrix.py | Optional (skipped after `BRACKET_FINALIZED=true`) |
+| 4 | fetch_momentum_ratings.py | Required |
+| 5 | fetch_game_scores_espn.py | Required |
+| 6 | calculate_momentum.py | Required |
+| 7 | fetch_historical_four_factors.py | Optional |
+| 8 | fetch_espn_shooting_stats.py | Optional |
 
-Required steps failing will exit with code 1 (visible as a failed run in Railway dashboard). Optional steps log a warning and continue.
+Required steps failing exits the pipeline with code 1 (Railway flags the run). Optional steps log a warning and continue — stale data is acceptable, a broken pipeline is not.
 
----
+## API Endpoints
+
+All routes live inside `create_app()` — required by the application factory pattern.
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/bracket` | Full bracket with all regions and seeds |
+| `GET /api/team/<id>/ratings` | KenPom ratings, resume, momentum |
+| `GET /api/team/<id>/shooting` | ESPN shooting stats (3PT%, FT%, rates) |
+| `GET /api/team/<id>/resume-games` | Quality wins + notable losses with game context |
+| `GET /api/players/<id>` | Key players for a team |
+| `GET /api/contenders` | Championship contender scores |
+| `GET /api/search?q=` | Team name search (case-insensitive) |
+
+### Shooting Stats API Shape
+
+Rates are stored as decimals, displayed as percentages — multiply × 100 in the frontend:
+
+```json
+{
+  "shooting": {
+    "three_point_pct": 34.1,
+    "three_point_rate": 0.429,
+    "free_throw_pct": 72.6,
+    "ft_rate": 0.374,
+    "opp_fg3_pct": null,
+    "updated_at": "2026-03-10 11:01:30"
+  }
+}
+```
 
 ## Local Development
 
-### Prerequisites
-- Python 3.12+
-- Node 20+
-- A `.env` file in the project root
-
-### .env file
-```
-KENPOM_API_KEY=your_key_here
-# Leave DATABASE_URL unset to use local SQLite
-```
-
-### Setup
 ```bash
-# Install Python dependencies
+# Install Python deps
 pip install -r requirements.txt
 
-# Install frontend dependencies
-cd frontend && npm install && cd ..
+# Install frontend deps
+cd frontend && npm install
 
-# Build frontend
-cd frontend && npm run build && cd ..
+# Build frontend (Flask serves the built files)
+npm run build
 
+# Set DATABASE_URL in .env (points to Railway PostgreSQL)
 # Run Flask dev server
 python backend/app.py
 ```
 
-### Running scrapers locally
+Run a scraper manually:
 ```bash
-# Full data sync
-python scrapers/fetch_data.py
-
-# Specific scrapers
-python scrapers/fetch_games.py --days 7
-python scrapers/fetch_game_scores_espn.py
-python scrapers/calculate_momentum.py
-
-# Test cron without executing
-python cron.py --dry-run
-
-# Run full pipeline manually
-python cron.py
+python scrapers/fetch_espn_shooting_stats.py
+python cron.py --dry-run   # print steps without executing
 ```
 
-### Local vs Production database
-The `utils/db.py` utility auto-detects which database to use:
-- **No `DATABASE_URL` set** → uses `database/kenpom.db` (SQLite, local dev)
-- **`DATABASE_URL` set** → connects to PostgreSQL (Railway production)
+## Railway Environment Variables
 
-All SQL syntax differences between SQLite and PostgreSQL are handled automatically in `utils/db.py` — scrapers don't need to know which database they're talking to.
+| Variable | Service | Purpose |
+|----------|---------|---------|
+| `DATABASE_URL` | Both | Auto-injected by Railway PostgreSQL plugin |
+| `KENPOM_API_KEY` | Cron | KenPom API authentication |
+| `BRACKET_FINALIZED` | Cron | Set `true` on Selection Sunday to skip bracket import |
 
----
+## Key Design Decisions
 
-## Manual Data Updates
+**ESPN ID mapping** — ESPN uses internal team IDs completely different from KenPom's. The shooting scraper fetches ESPN's full team list first, matches teams by name (manual mappings + fuzzy matching at 0.82 threshold), then uses ESPN's ID for per-team stats calls.
 
-Some data sources require manual intervention:
+**`IF NOT EXISTS` for schema migrations** — all `ALTER TABLE ADD COLUMN` statements use `IF NOT EXISTS` rather than try/except. This prevents bare exception handlers from silently swallowing real errors (permissions issues, typos, etc.) while still being safe to re-run.
 
-### NCAA Resume Data (NET rankings, quad records)
-1. Download `NCAA_Statistics.csv` from NCAA.com
-2. Run: `python scrapers/import_ncaa_data.py NCAA_Statistics.csv`
+**Required vs optional pipeline steps** — steps where failure would break the user experience (ratings, momentum, games) are required and exit with code 1. Steps like shooting stats and contender scores are optional — a failure just means slightly stale data.
 
-### ESPN Team Branding (logos, colors)
-Run once per season or when teams are added:
-```bash
-python scrapers/fetch_espn_branding.py
-```
+**Flat API shapes** — the shooting endpoint returns a flat object rather than nested `three_point: { pct, made, att }`. Simpler to consume and easier to change individual fields without breaking consumers.
 
-### Historical Four Factors (championship contender analysis)
-Run once to populate historical data (2002–2025), then the cron handles current season scoring:
-```bash
-python scrapers/fetch_historical_four_factors.py --all
-```
+## Selection Sunday Checklist (~March 16)
 
----
-
-## Tournament Bracket
-
-### Pre-Selection Sunday
-The cron imports the Bracket Matrix consensus projection daily. This reflects the aggregate of all major bracketologists' predictions.
-
-### After Selection Sunday (~March 16)
-1. Run the ESPN bracket importer once to load the real field
-2. Set `BRACKET_FINALIZED=true` in the Railway cron environment variables
-3. The cron will skip bracket imports from that point — the real bracket doesn't change
-
----
-
-## API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/search` | GET | Search teams by name (`?q=duke`) |
-| `/api/team/:id` | GET | Full team data (ratings, four factors, resume) |
-| `/api/compare` | GET | Side-by-side team comparison (`?team1=id&team2=id`) |
-| `/api/momentum` | GET | Momentum rankings with tier filters |
-| `/api/bracket` | GET | Current bracket with seeds and regions |
-| `/api/contenders` | GET | Championship contender tier list |
-
----
-
-## Security
-
-- Rate limiting on all API endpoints (Flask-Limiter)
-- Input validation and sanitization on all query parameters
-- CORS configured for production domain only
-- Bot protection via request validation middleware
+1. ESPN publishes real bracket ~6pm ET
+2. Run `import_espn_bracket.py` once (builds out the real bracket in DB)
+3. Set `BRACKET_FINALIZED=true` in Railway cron environment
+4. Cron skips Bracket Matrix import from that point forward

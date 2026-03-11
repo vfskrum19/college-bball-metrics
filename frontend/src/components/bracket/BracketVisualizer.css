@@ -632,6 +632,44 @@
     gap: 8px;
 }
 
+.modal-narratives {
+    padding: 16px 20px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+}
+
+.modal-narratives h4 {
+    margin: 0 0 12px 0;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    opacity: 0.6;
+}
+
+.narratives-comparison {
+    display: grid;
+    grid-template-columns: 1fr 1px 1fr;
+    gap: 0 16px;
+    align-items: start;
+}
+
+.narrative-divider {
+    background: rgba(255,255,255,0.1);
+    width: 1px;
+    align-self: stretch;
+}
+
+.narrative-text {
+    margin: 0;
+    font-size: 0.8rem;
+    line-height: 1.6;
+    font-style: italic;
+    opacity: 0.85;
+}
+
+.narrative-empty {
+    opacity: 0.4;
+}
+
 /* ============================================================
    RESPONSIVE
    ============================================================ */

@@ -1,5 +1,5 @@
 # KenPom App — Development Progress Summary
-Last updated: 2026-03-06
+Last updated: 2026-03-10
 
 ## Architecture
 - **Frontend:** React (Vite), served as static files by Flask
@@ -71,15 +71,16 @@ Tables already fixed:
 - final_four_analysis -> ['metric']
 - contender_scores -> ['team_id', 'season']
 
-## Production Status (as of 2026-03-05)
-- Daily cron running clean (confirmed morning of 2026-03-05)
-- All 7 pipeline steps completing successfully
+## Production Status (as of 2026-03-10)
+- Daily cron running clean — 8 steps (7 required + 1 optional shooting stats)
 - Game score backfill complete (Nov 2025 - Mar 2026)
 - Momentum calculator accurate with full game history
 - Bracket Matrix projected field updating daily
-- Team cards populating correctly (ratings, four factors, resume)
+- Team cards: shooting profile live (3PT%, 3PA Rate, FT%, FT Rate)
+- Resume section: quality wins / notable losses with game context
 - Search bar working case-insensitively
 - CompareView working correctly
+- ESPN shooting stats scraped for 319/365 teams (87%); remainder are small programs outside tournament
 
 ## Bugs Fixed During Migration
 | Bug | Fix |
@@ -100,79 +101,55 @@ Tables already fixed:
 
 ---
 
-## Active Branch: feature/team-card-redesign
-**Created: 2026-03-06** — branched from main after production was confirmed stable.
-**Do not merge to main until frontend work is complete and tested.**
+## Branch: feature/team-card-redesign → MERGED TO MAIN (2026-03-10)
 
-### Goal
-Redesign team cards and matchup view to:
-- Remove KenPom Four Factors from public display (paywall data)
-- Replace with ESPN-sourced shooting stats (3PT%, FT%)
-- Add quality wins / notable losses with game context to resume section
-- Keep KenPom ranking numbers (free tier) but drop raw efficiency values
+### What Was Built
 
-### What's Been Built on This Branch
-
-#### New scraper: `scrapers/fetch_espn_shooting_stats.py`
+#### `scrapers/fetch_espn_shooting_stats.py`
 - Fetches ESPN's full team list to get ESPN's internal IDs (different from KenPom IDs)
 - Matches 356/365 teams by name (98%) using manual mappings + fuzzy matching
-- Remaining 9 unmatched are programs not in ESPN's system (Lindenwood, Southern Indiana etc.) — none are tournament teams
-- Adds columns to teams table: `fg3_pct`, `fg3_made`, `fg3_att`, `ft_pct`, `ft_made`, `ft_att`, `opp_fg3_pct`, `ft_rate`, `shooting_updated_at`
-- Self-migrating: runs `ALTER TABLE ADD COLUMN` on startup, safe to run repeatedly
-- Key lesson: ESPN's `displayName` always includes mascot (e.g. "Ball State Cardinals") — manual mappings must include full name or fuzzy match falls below 0.82 threshold
+- Adds columns to teams table: `fg3_pct`, `fg3_att`, `fg3_rate`, `ft_pct`, `ft_att`, `ft_rate`, `opp_fg3_pct`, `shooting_updated_at`
+- `fg3_rate` = 3PA/FGA (shot profile metric), `ft_rate` = FTA/FGA (aggressiveness at rim)
+- Self-migrating: uses `ALTER TABLE ADD COLUMN IF NOT EXISTS` — safe to re-run
+- Key fix: switched from bare `except Exception: pass` to `IF NOT EXISTS` to stop silently swallowing real DB errors
 
-#### New API endpoints in `backend/app.py`
-Both endpoints live inside `create_app()` — required by the application factory pattern.
+#### API changes (`backend/app.py`)
+**`GET /api/team/<id>/shooting`** — flat response shape:
+```json
+{ "three_point_pct": 34.1, "three_point_rate": 0.429, "free_throw_pct": 72.6, "ft_rate": 0.374, "opp_fg3_pct": null }
+```
+- Rates stored as decimals (0.374), displayed as percentages (37.4%) — multiply × 100 in frontend
+- Percentages stored as whole numbers (34.1), display as-is with `%` suffix
 
-**`GET /api/team/<id>/shooting`**
-- Returns ESPN shooting stats for a team
-- Returns `shooting: null` with message if scraper hasn't run yet (frontend shows loading state)
-- Replaces Four Factors section on team cards
+**`GET /api/team/<id>/resume-games`** — quality wins + notable losses with game context
 
-**`GET /api/team/<id>/resume-games`**
-- Returns quality wins (top 5 by opponent NET rank) and notable losses (top 3)
-- Each game includes: opponent name/logo/NET rank, home/away indicator ("vs" or "@"), date, score
-- Losses flagged `is_bad_loss: true` if opponent NET rank > 100
-- Limits capped server-side (max 10 wins, 8 losses) — callers can override via query params
-- Uses UNION ALL to handle both home and away games in a single query
+#### Frontend (`TeamCard.jsx`, `BracketVisualizer.jsx`)
+- Replaced Four Factors section with Shooting Profile (3PT%, 3PA Rate, FT%, FT Rate)
+- Removed season totals (made/att) from display — rates tell the story
+- `(FTA/FGA)` and `(3PA/FGA)` descriptors moved inline to label side
+- `BracketVisualizer` matchup modal updated to flat API shape + added 3PA Rate and FT Rate rows
+- `SectionErrorBoundary` class component added — catches render errors in ShootingProfile/ResumeGames, shows fallback instead of crashing whole card
+- Resume section: quality wins and notable losses with opponent logo, location, NET rank, score, date; bad losses flagged red
 
-#### Updated `cron.py`
-- Added `fetch_espn_shooting_stats` as Step 8 (optional)
-- Runs last — slowest optional step (~2 min for 356 HTTP calls), all critical steps finish first
-- Failure raises RuntimeError which cron catches, logs, and continues without aborting pipeline
+#### `cron.py`
+- Step 8 (optional): `fetch_espn_shooting_stats` — runs last, ~2 min for 356 HTTP calls
+- Failure logged and skipped without aborting pipeline (stale shooting stats are acceptable)
 
-### What's Next (Frontend)
-The data pipeline is fully built. Remaining work is all React component changes:
-
-1. **Team card shooting section** — replace Four Factors UI with new shooting stats
-   - Call `/api/team/<id>/shooting` instead of reading from four_factors
-   - Display: Team 3PT% | Opp 3PT% allowed | Team FT% | FT Rate
-   - Show "Stats loading..." if data is null
-
-2. **Resume section expansion** — add quality wins/losses with game context
-   - Call `/api/team/<id>/resume-games` 
-   - Display each win/loss with: opponent logo, "@"/"vs" indicator, date, score, opponent NET rank
-   - Cap display at 5 wins / 3 losses (matches ESPN bracket breakdown style)
-   - Flag bad losses in red
-
-3. **Remove raw efficiency values** — show KenPom rank badges only, drop decimal values
-   - Keep: `#10 KenPom`, `#8 NET`, rank badges on AdjEM/ORtg/DRtg/Tempo
-   - Remove: raw values like `29.2`, `123.6`, `94.4` from the efficiency section
-
-4. **Trim contributors list** — cap at 4 players (currently shows 6, bottom 2 add no value)
-
-### Files Changed on This Branch
+### Files Changed
 | File | Change |
 |------|--------|
-| `backend/app.py` | Added `/api/team/<id>/shooting` and `/api/team/<id>/resume-games` endpoints; added `/api/contenders` endpoint that was missing |
-| `cron.py` | Added fetch_espn_shooting_stats as optional Step 8 |
-| `scrapers/fetch_espn_shooting_stats.py` | New file |
+| `scrapers/fetch_espn_shooting_stats.py` | New — ESPN shooting stats scraper |
+| `backend/app.py` | New shooting + resume-games endpoints; flat API shape; fg3_rate added |
+| `cron.py` | Step 8 added |
+| `frontend/src/components/TeamCard.jsx` | Full shooting profile section rewrite |
+| `frontend/src/components/BracketVisualizer.jsx` | Shooting StatBars updated to flat API shape |
 
 ---
 
 ## Future Work
-- import_espn_bracket.py — real bracket importer from ESPN API
-- Stylistic team profile algorithm (pace, shot profile, defense type → matchup narrative)
-- cron_players.py — separate Railway cron for player stats
-- SendGrid email alerts on cron failure (deferred, using Railway logs for now)
-- README rewrite to reflect production architecture
+- **import_espn_bracket.py** — real bracket importer from ESPN API (needed for Selection Sunday)
+- **Team narrative engine** — generate a one-paragraph scouting report per team based on shot profile, pace, defensive style, and resume strength; display on team card and matchup modal
+- **Clickable opponent links** — resume game rows link to that opponent's team card
+- **cron_players.py** — separate Railway cron for player stats
+- **SendGrid email alerts** on cron failure (deferred, using Railway logs for now)
+- **Rate limiting + bot protection** — add to Flask API before any public launch
