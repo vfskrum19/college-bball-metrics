@@ -32,3 +32,7 @@ Flask-Limiter>=3.5.0
 # The -binary suffix means it bundles its own compiled C extensions,
 # which is what you want for deployment (vs building from source).
 psycopg2-binary>=2.9.9
+
+# Anthropic API client
+# Used for generating team narratives. Optional, but must be installed if you want that feature.
+anthropic>=0.49.0
