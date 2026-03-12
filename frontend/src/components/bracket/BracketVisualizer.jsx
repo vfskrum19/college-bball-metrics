@@ -420,6 +420,7 @@ useEffect(() => {
                                 </div>
                             </div>
                         )}
+                        
                         {/* Key Players Section */}
                         <div className="modal-players">
                             <h4>Key Players</h4>

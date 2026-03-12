@@ -23,7 +23,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from utils.db import get_db, commit
+from utils.db import get_db, commit, get_cursor
 
 # ---------------------------------------------------------------------------
 # Context translation — this is the most important part of the whole file.
@@ -162,7 +162,7 @@ def usage_label(usage_pct):
 
 def get_team_data(db, team_id):
     """Fetch all team-level data needed for narrative generation."""
-    cur = db.cursor()
+    cur = get_cursor(db)
 
     cur.execute("""
         SELECT
@@ -190,8 +190,28 @@ def get_team_data(db, team_id):
     if not row:
         return None
 
-    cols = [d[0] for d in cur.description]
-    team = dict(zip(cols, row))
+    team = dict(row)
+
+    # Cast numeric fields — RealDictCursor can return these as strings
+    int_fields = [
+        'kenpom_rank', 'net_rank', 'rank_adj_oe', 'rank_adj_de', 'rank_adj_tempo',
+        'quad1_wins', 'quad1_losses', 'quad2_wins', 'quad2_losses',
+        'quad3_wins', 'quad3_losses', 'sor_rank',
+        'wins_l10', 'losses_l10', 'win_streak', 'loss_streak', 'rank_change_l10',
+    ]
+    float_fields = [
+        'adj_em', 'adj_oe', 'adj_de', 'adj_tempo',
+        'fg3_rate', 'ft_rate', 'fg3_pct', 'ft_pct',
+        'avg_vs_expected_l10',
+    ]
+    for f in int_fields:
+        if team.get(f) is not None:
+            try: team[f] = int(team[f])
+            except (ValueError, TypeError): team[f] = None
+    for f in float_fields:
+        if team.get(f) is not None:
+            try: team[f] = float(team[f])
+            except (ValueError, TypeError): team[f] = None
 
     # Enrich recent games with opponent NET ranks
     team['notable_wins'] = []
@@ -199,7 +219,10 @@ def get_team_data(db, team_id):
 
     if team.get('games_data'):
         import json
-        games = json.loads(team['games_data']) if isinstance(team['games_data'], str) else team['games_data']
+        try:
+            games = json.loads(team['games_data']) if isinstance(team['games_data'], str) else team['games_data']
+        except (json.JSONDecodeError, TypeError):
+            games = []
 
         # Look up NET ranks for all opponents in one query
         opponent_names = [g['opponent'] for g in games]
@@ -211,7 +234,7 @@ def get_team_data(db, team_id):
                 LEFT JOIN resume_metrics rm2 ON t2.team_id = rm2.team_id
                 WHERE t2.name = ANY(%s)
             """, (opponent_names,))
-            net_lookup = {row[0]: row[1] for row in cur.fetchall()}
+            net_lookup = {row['name']: row['net_rank'] for row in cur.fetchall()}
 
             # Tag each game with opponent NET rank
             for g in games:
@@ -233,7 +256,7 @@ def get_team_data(db, team_id):
 
 def get_player_data(db, team_id):
     """Fetch top players with stats and roles."""
-    cur = db.cursor()
+    cur = get_cursor(db)
 
     cur.execute("""
         SELECT
@@ -252,8 +275,16 @@ def get_player_data(db, team_id):
         LIMIT 4
     """, (team_id,))
 
-    cols = [d[0] for d in cur.description]
-    return [dict(zip(cols, row)) for row in cur.fetchall()]
+    players = [dict(row) for row in cur.fetchall()]
+
+    float_fields = ['ppg','rpg','apg','efg_pct','three_pct','ft_pct',
+                    'usage_pct','bpm','per','blk_pct','stl_pct','ast_pct']
+    for p in players:
+        for f in float_fields:
+            if p.get(f) is not None:
+                try: p[f] = float(p[f])
+                except (ValueError, TypeError): p[f] = None
+    return players
 
 # ---------------------------------------------------------------------------
 # Context builder — translates raw numbers into labeled facts for the prompt
@@ -436,7 +467,7 @@ def generate_narrative(context_block, api_key, retries=3):
 
 def ensure_narrative_column(db):
     """Add narrative column to teams table if it doesn't exist."""
-    cur = db.cursor()
+    cur = get_cursor(db)
     cur.execute("""
         ALTER TABLE teams ADD COLUMN IF NOT EXISTS narrative TEXT
     """)
@@ -446,7 +477,7 @@ def ensure_narrative_column(db):
     commit(db)
 
 def save_narrative(db, team_id, narrative):
-    cur = db.cursor()
+    cur = get_cursor(db)
     cur.execute("""
         UPDATE teams
         SET narrative = %s,
@@ -475,7 +506,7 @@ def run_generate_narratives(team_ids=None, dry_run=False):
     db = get_db()
     if not dry_run:
         ensure_narrative_column(db)
-    cur = db.cursor()
+    cur = get_cursor(db)
     if team_ids:
         placeholders = ",".join(["%s"] * len(team_ids))
         cur.execute(f"SELECT team_id, name FROM teams WHERE team_id IN ({placeholders})", team_ids)
@@ -493,7 +524,9 @@ def run_generate_narratives(team_ids=None, dry_run=False):
     success, skipped, failed = 0, 0, 0
     print(f"  {total} teams need narratives")
 
-    for i, (team_id, team_name) in enumerate(teams):
+    for i, row in enumerate(teams):
+        team_id = row['team_id']
+        team_name = row['name']
         # Fresh connection per team — avoids Railway killing long-lived connections
         db = get_db()
         try:
@@ -549,15 +582,13 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.team:
-        # Quick single-team test
         db = get_db()
-        cur = db.cursor()
-        # Try exact match first, then partial
+        cur = get_cursor(db)
         cur.execute("SELECT team_id, name FROM teams WHERE name ILIKE %s LIMIT 1", (args.team,))
         exact = cur.fetchone()
         if exact:
             db.close()
-            run_generate_narratives(team_ids=[exact[0]], dry_run=True)
+            run_generate_narratives(team_ids=[exact['team_id']], dry_run=True)
         else:
             cur.execute("SELECT team_id, name FROM teams WHERE name ILIKE %s LIMIT 5", (f"%{args.team}%",))
             rows = cur.fetchall()
@@ -567,9 +598,9 @@ if __name__ == "__main__":
                 sys.exit(1)
             if len(rows) > 1:
                 print(f"Multiple matches for '{args.team}' — be more specific:")
-                for tid, tname in rows:
-                    print(f"  {tname}")
+                for row in rows:
+                    print(f"  {row['name']}")
                 sys.exit(1)
-            run_generate_narratives(team_ids=[rows[0][0]], dry_run=True)
+            run_generate_narratives(team_ids=[rows[0]['team_id']], dry_run=True)
     else:
         run_generate_narratives(dry_run=args.dry_run)
