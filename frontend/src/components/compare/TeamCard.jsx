@@ -370,7 +370,7 @@ function TeamCard({ data, showPlayers = true }) {
                         </div>
                     </div>
                 </div>
-
+                
                 {/* ── Narrative ── */}
                 {narrative && (
                     <div style={{
@@ -382,9 +382,10 @@ function TeamCard({ data, showPlayers = true }) {
                     }}>
                         <p style={{
                             margin: 0,
-                            fontSize: '0.85rem',
+                            fontSize: '0.875rem',
                             lineHeight: '1.6',
-                            color: headerTextColor,
+                            color: isColorLight(primaryColor) ? primaryColor : 
+                                isColorLight(secondaryColor) ? secondaryColor : '#cbd5e1',
                             fontStyle: 'italic',
                             opacity: 0.9,
                         }}>
