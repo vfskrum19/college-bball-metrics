@@ -387,7 +387,7 @@ def create_app(config_name=None):
             '''SELECT t.*, r.rank_adj_em, r.adj_em
                FROM teams t
                LEFT JOIN ratings r ON t.team_id = r.team_id
-               WHERE t.name LIKE ? AND t.season = ?
+               WHERE t.name ILIKE %s AND t.season = %s
                ORDER BY t.name
                LIMIT 20''',
             (f'%{query}%', season)
