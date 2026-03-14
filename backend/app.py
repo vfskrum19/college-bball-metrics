@@ -580,7 +580,7 @@ def create_app(config_name=None):
               AND g.away_score IS NOT NULL
               AND g.away_score < g.home_score
 
-            ORDER BY opp_net_rank ASC NULLS LAST
+            ORDER BY opp_net_rank DESC NULLS LAST
             LIMIT ?
         '''
 
