@@ -142,20 +142,6 @@ function ShootingProfile({ teamId }) {
                     </span>
                 </div>
             </div>
-
-            {/* Defense */}
-            <div>
-                <div className="factor-label">Defense</div>
-                <div className="metric-row">
-                    <span className="metric-label">Opp. 3PT% Allowed</span>
-                    <span className="metric-value">
-                        {shooting.opp_fg3_pct != null
-                            ? `${shooting.opp_fg3_pct.toFixed(1)}%`
-                            : <span style={{ color: '#888' }}>N/A</span>
-                        }
-                    </span>
-                </div>
-            </div>
         </div>
     );
 }
@@ -370,7 +356,7 @@ function TeamCard({ data, showPlayers = true }) {
                         </div>
                     </div>
                 </div>
-                
+
                 {/* ── Narrative ── */}
                 {narrative && (
                     <div style={{

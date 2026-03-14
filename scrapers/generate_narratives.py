@@ -493,11 +493,11 @@ def save_narrative(db, team_id, narrative):
 def run_generate_narratives(team_ids=None, dry_run=False):
     """
     Generate narratives for all teams (or a subset if team_ids provided).
-
-    dry_run=True: prints the context block and narrative without writing to DB.
-    Useful for tuning the prompt before a full run.
+    Uses a thread pool for parallel API calls — ~5x faster than sequential.
     """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     import os
+
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         raise RuntimeError("ANTHROPIC_API_KEY not set in environment")
@@ -511,7 +511,6 @@ def run_generate_narratives(team_ids=None, dry_run=False):
         placeholders = ",".join(["%s"] * len(team_ids))
         cur.execute(f"SELECT team_id, name FROM teams WHERE team_id IN ({placeholders})", team_ids)
     else:
-        # Only fetch teams that don't have a narrative yet
         cur.execute("""
             SELECT team_id, name FROM teams
             WHERE narrative IS NULL OR narrative = ''
@@ -524,49 +523,66 @@ def run_generate_narratives(team_ids=None, dry_run=False):
     success, skipped, failed = 0, 0, 0
     print(f"  {total} teams need narratives")
 
-    for i, row in enumerate(teams):
+    def process_team(row):
         team_id = row['team_id']
         team_name = row['name']
-        # Fresh connection per team — avoids Railway killing long-lived connections
         db = get_db()
         try:
             team = get_team_data(db, team_id)
             if not team:
-                print(f"  [{i+1}/{total}] SKIP {team_name} — no team data")
-                skipped += 1
-                db.close()
-                continue
+                return ('skip', team_name, None, None)
 
             players = get_player_data(db, team_id)
             context = build_team_context(team, players)
-
-            if dry_run:
-                print(f"\n{'='*60}")
-                print(f"TEAM: {team_name}")
-                print(f"{'='*60}")
-                print("CONTEXT SENT TO MODEL:")
-                print(context)
-                print("\nGENERATED NARRATIVE:")
-
             narrative = generate_narrative(context, api_key)
 
-            if dry_run:
-                print(narrative)
-            else:
-                save_narrative(db, team_id, narrative)
-                print(f"  [{i+1}/{total}] OK  {team_name}")
-
-            success += 1
-
-            # Rate limit: ~40 req/min on Sonnet — 1.5s gap is safe
             if not dry_run:
-                time.sleep(1.5)
+                save_narrative(db, team_id, narrative)
+
+            return ('ok', team_name, context, narrative)
 
         except Exception as e:
-            print(f"  [{i+1}/{total}] FAIL {team_name}: {e}")
-            failed += 1
+            return ('fail', team_name, None, str(e))
         finally:
             db.close()
+
+    # dry_run processes one at a time for clean output
+    # full run uses 5 workers for parallel API calls
+    max_workers = 1 if dry_run else 3
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {}
+        for i, row in enumerate(teams):
+            futures[executor.submit(process_team, row)] = i
+            if not dry_run:
+                time.sleep(0.5)
+
+        completed = 0
+        for future in as_completed(futures):
+            completed += 1
+            result = future.result()
+            status, team_name = result[0], result[1]
+
+            if status == 'skip':
+                print(f"  [{completed}/{total}] SKIP {team_name} — no team data")
+                skipped += 1
+            elif status == 'ok':
+                context, narrative = result[2], result[3]
+                if dry_run:
+                    print(f"\n{'='*60}")
+                    print(f"TEAM: {team_name}")
+                    print(f"{'='*60}")
+                    print("CONTEXT SENT TO MODEL:")
+                    print(context)
+                    print("\nGENERATED NARRATIVE:")
+                    print(narrative)
+                else:
+                    print(f"  [{completed}/{total}] OK  {team_name}")
+                success += 1
+            elif status == 'fail':
+                print(f"  [{completed}/{total}] FAIL {team_name}: {result[3]}")
+                failed += 1
+
     print(f"\nDone — {success} generated, {skipped} skipped, {failed} failed")
     if failed > 0:
         raise RuntimeError(f"{failed} narratives failed to generate")

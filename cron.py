@@ -119,7 +119,7 @@ def build_steps():
         ("Calculate momentum scores",                        run_calculate_momentum,     False),
         ("Update championship contender scores",             run_contenders,             True),
         ("Fetch ESPN shooting stats (3PT%, FT%)",            run_fetch_shooting_stats,   True),
-        ("Generate team narratives (Anthropic)",             run_generate_narratives,    True),
+        # ("Generate team narratives (Anthropic)",             run_generate_narratives,    True),
     ]
 
     return steps

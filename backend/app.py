@@ -356,7 +356,8 @@ def create_app(config_name=None):
                 'team': dict(team[0]) if team else None,
                 'ratings': dict(ratings[0]) if ratings else None,
                 'four_factors': dict(four_factors[0]) if four_factors else None,
-                'resume': dict(resume[0]) if resume else None
+                'resume': dict(resume[0]) if resume else None,
+                'narrative': team[0]['narrative'] if team else None
             })
 
         return jsonify({'team1': teams_data[0], 'team2': teams_data[1]})

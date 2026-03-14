@@ -45,7 +45,7 @@ def make_request(endpoint, params):
 
 
 def fetch_teams(season=CURRENT_SEASON):
-    """Fetch all teams for a season (preserves branding data)"""
+    """Fetch all teams for a season (preserves branding and narrative data)"""
     print(f"Fetching teams for {season}...")
     data = make_request('teams', {'y': season})
     if not data:
@@ -54,18 +54,20 @@ def fetch_teams(season=CURRENT_SEASON):
 
     db = get_db()
 
-    # Save existing branding data before refresh
+    # Save existing branding AND narrative data before refresh
     existing_branding = {}
     try:
         rows = execute(db,
-            'SELECT team_id, logo_url, primary_color, secondary_color FROM teams WHERE season = ?',
+            'SELECT team_id, logo_url, primary_color, secondary_color, narrative, narrative_updated_at FROM teams WHERE season = ?',
             (season,)
         ).fetchall()
         for row in rows:
             existing_branding[row['team_id']] = {
                 'logo_url': row['logo_url'],
                 'primary_color': row['primary_color'],
-                'secondary_color': row['secondary_color']
+                'secondary_color': row['secondary_color'],
+                'narrative': row['narrative'],
+                'narrative_updated_at': row['narrative_updated_at'],
             }
     except Exception:
         pass
@@ -77,8 +79,8 @@ def fetch_teams(season=CURRENT_SEASON):
         branding = existing_branding.get(team_id, {})
         execute(db, '''
             INSERT INTO teams (team_id, name, conference, coach, arena, arena_city, arena_state, season,
-                               logo_url, primary_color, secondary_color)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                               logo_url, primary_color, secondary_color, narrative, narrative_updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             team_id,
             team.get('TeamName'),
@@ -90,7 +92,9 @@ def fetch_teams(season=CURRENT_SEASON):
             season,
             branding.get('logo_url'),
             branding.get('primary_color'),
-            branding.get('secondary_color')
+            branding.get('secondary_color'),
+            branding.get('narrative'),
+            branding.get('narrative_updated_at'),
         ))
 
     commit(db)
