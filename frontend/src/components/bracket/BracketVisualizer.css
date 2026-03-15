@@ -721,6 +721,12 @@
         justify-content: center;
         text-align: center;
     }
+    
+    .modal-players {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
 
     .narratives-comparison {
         grid-template-columns: 1fr;
