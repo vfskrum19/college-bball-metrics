@@ -30,7 +30,7 @@ function App() {
                             Bracket
                         </NavLink>
                         <NavLink to="/momentum" className={({isActive}) => isActive ? 'nav-link active' : 'nav-link'}>
-                            🔥 Momentum
+                            Momentum
                         </NavLink>
                     </nav>
                 </header>

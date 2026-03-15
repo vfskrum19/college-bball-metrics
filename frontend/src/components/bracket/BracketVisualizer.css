@@ -717,4 +717,48 @@
         width: 100%;
         height: 1px;
     }
+    .modal-vs {
+        justify-content: center;
+        text-align: center;
+    }
+
+    .narratives-comparison {
+        grid-template-columns: 1fr;
+        gap: 16px 0;
+    }
+
+    .narrative-divider {
+        display: none;
+    }
+
+    .modal-narratives h4 {
+        text-align: center;
+    }
+
+    .narrative-text {
+        font-size: 0.85rem;
+    }
+
+    .modal-matchup {
+        padding: 15px;
+        gap: 10px;
+    }
+
+    .modal-team-header {
+        padding: 15px 10px 10px;
+    }
+
+    .modal-name {
+        font-size: 0.95rem;
+    }
+
+    .modal-stats {
+        padding: 15px;
+    }
+
+    .stat-value {
+        width: 45px;
+        font-size: 0.8rem;
+    }
 }
+
