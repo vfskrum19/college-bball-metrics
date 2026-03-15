@@ -55,7 +55,8 @@ def get_team_id_by_name(db, team_name, season=CURRENT_SEASON):
     return result['team_id'] if result else None
 
 
-def fetch_fanmatch_for_date(date_str, season=CURRENT_SEASON):
+def fetch_fanmatch_for_date(date_str, season=CURRENT_SEASON, 
+                             team_id_lookup=None, existing_game_ids=None):
     """Fetch fanmatch predictions for a specific date. Returns (inserted, skipped)."""
     data = make_request('fanmatch', {'d': date_str})
     if not data:
@@ -68,15 +69,26 @@ def fetch_fanmatch_for_date(date_str, season=CURRENT_SEASON):
     for game in data:
         game_id = game.get('GameID')
 
-        existing = execute(db, 'SELECT id FROM games WHERE game_id = ?', (game_id,)).fetchone()
-        if existing:
+        # Use pre-loaded set instead of DB query
+        if existing_game_ids is not None and game_id in existing_game_ids:
             skipped += 1
             continue
+        elif existing_game_ids is None:
+            existing = execute(db, 'SELECT id FROM games WHERE game_id = ?', (game_id,)).fetchone()
+            if existing:
+                skipped += 1
+                continue
 
         home_name = game.get('Home')
         away_name = game.get('Visitor')
-        home_team_id = get_team_id_by_name(db, home_name, season)
-        away_team_id = get_team_id_by_name(db, away_name, season)
+
+        # Use pre-loaded dict instead of DB query
+        if team_id_lookup is not None:
+            home_team_id = team_id_lookup.get(home_name)
+            away_team_id = team_id_lookup.get(away_name)
+        else:
+            home_team_id = get_team_id_by_name(db, home_name, season)
+            away_team_id = get_team_id_by_name(db, away_name, season)
 
         if not home_team_id or not away_team_id:
             if not home_team_id: print(f"  ⚠ Could not find home team: {home_name}")
@@ -102,6 +114,9 @@ def fetch_fanmatch_for_date(date_str, season=CURRENT_SEASON):
             game.get('ThrillScore')
         ))
         inserted += 1
+        # Track newly inserted game_ids so subsequent days don't re-check
+        if existing_game_ids is not None:
+            existing_game_ids.add(game_id)
 
     commit(db)
     close_db(db)
@@ -117,11 +132,24 @@ def fetch_games_range(days_back=30, season=CURRENT_SEASON):
         print("❌ KENPOM_API_KEY not set in environment")
         return
 
+    # Pre-load team name → team_id lookup ONCE instead of per-game
+    db = get_db()
+    rows = execute(db, 'SELECT team_id, name FROM teams WHERE season = ?', (season,)).fetchall()
+    team_id_lookup = {row['name']: row['team_id'] for row in rows}
+
+    # Pre-load all existing game_ids ONCE to avoid per-game existence checks
+    existing_game_ids = set(
+        row['game_id'] for row in 
+        execute(db, 'SELECT game_id FROM games').fetchall()
+    )
+    close_db(db)
+
+    print(f"  Loaded {len(team_id_lookup)} teams, {len(existing_game_ids)} existing games\n")
+
     end_date = datetime.now() - timedelta(days=1)
     start_date = end_date - timedelta(days=days_back)
 
     print(f"Date range: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
-    print(f"Note: Using yesterday as end date - today's games may be incomplete\n")
 
     total_inserted = 0
     total_skipped = 0
@@ -132,7 +160,9 @@ def fetch_games_range(days_back=30, season=CURRENT_SEASON):
         date_str = current_date.strftime('%Y-%m-%d')
         print(f"  {date_str}...", end=" ", flush=True)
 
-        inserted, skipped = fetch_fanmatch_for_date(date_str, season)
+        inserted, skipped = fetch_fanmatch_for_date(
+            date_str, season, team_id_lookup, existing_game_ids
+        )
 
         if inserted > 0 or skipped > 0:
             print(f"✓ {inserted} new, {skipped} existing")
@@ -152,7 +182,6 @@ def fetch_games_range(days_back=30, season=CURRENT_SEASON):
     print(f"  Games already existed: {total_skipped}")
     print(f"{'='*60}\n")
     return total_inserted
-
 
 def show_stats():
     db = get_db()
