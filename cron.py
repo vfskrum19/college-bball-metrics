@@ -107,12 +107,6 @@ def build_steps():
         ("Fetch game predictions (Fanmatch, last 3 days)",   run_fetch_games,            False),
     ]
 
-    if not BRACKET_FINALIZED:
-        steps.append(
-        ("Import projected bracket (Bracket Matrix)",        run_import_bracket,         True))
-    else:
-        print("ℹ BRACKET_FINALIZED=true — skipping bracket import")
-
     steps += [
         ("Fetch rating snapshots (momentum trajectory)",     run_fetch_momentum_ratings, False),
         ("Fetch game scores (ESPN)",                         run_fetch_game_scores,      False),
